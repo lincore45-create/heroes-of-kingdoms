@@ -35,17 +35,20 @@ const W = 1152, H = 648;         // размер экрана (на 20% подр
 const GROUND = 456;              // линия земли, на ней всё стоит
 const BANK = 485;                // где берег переходит в воду
 const RH = H - BANK;             // высота полосы воды
-const WORLD = 22500;             // ширина мира
+const WORLD = 30000;             // ширина мира
+const PLAYER_X = 7000;           // наш замок
+const ENEMY_X = 23000;           // вражеский замок
 const S = 3;                     // во сколько раз увеличиваем пиксели
 const CYCLE = 170;               // длина суток в секундах
 const SEASON_LEN = 5;            // сколько ночей длится сезон
 const WALLET = 30;               // сколько монет помещается в кошелёк
 const MAX_SIEGE = 2;             // сколько осадных машин можно держать
-const DENS = [[-9500, 3], [-6500, 2], [-3750, 1], [3900, 1], [6600, 2], [9400, 3]];   // логова: смещение от лагеря и сила
-const HUTS = [-8000, -5100, -1950, 2050, 5200, 8100];                               // хижины бродяг
+// логова слева направо: среднее, слабое, [наш замок], среднее, сильное, среднее, [вражеский замок], слабое, среднее
+const DENS = [[1200, 2], [3900, 1], [10300, 2], [15000, 3], [19700, 2], [26100, 1], [28800, 2]];
+const HUTS = [2600, 5300, 8900, 12600];   // хижины бродяг на нашей половине
 const SPOTS = { guild: -700, dwell: -420, hall: 0, bank: 260, farm: 480, forge: 720 };
 // Линии стен по сторонам: первая стоит сразу, следующие открываются после захвата логова силы 1, 2, 3
-const WALL_LINES = { '-1': [940, 4130, 6880, 9880], '1': [940, 4280, 6980, 9780] };
+const WALL_LINES = { '-1': [940, 3500, 6200], '1': [940, 3700, 8400, 13100] };
 const RETINUE_CALM = 25;         // через сколько секунд без боя свита расходится
 const FONT = '"Pixelify Sans", ui-monospace, monospace';
 const TXT = { fontFamily: FONT, fontSize: '18px', color: '#efe3c2', stroke: '#141d21', strokeThickness: 4 };
@@ -102,6 +105,12 @@ const RACES = {
     pal: { K:'#e09a3e', k:'#a86a22', S:'#b6c24a', s:'#8c9832', E:'#20160f', H:'#3e3a1f', C:'#6a3f86', c:'#472a5b', Y:'#8c5cb0', B:'#2d2218',
            A:'#7f6a4a', a:'#56472f', Q:'#a08a62', W:'#d0a066', R:'#4f6b3a', r:'#344a26', L:'#8c7a58', l:'#5e5139', D:'#2d2218', G:'#8aff6a' } },
 };
+
+// Вражеское королевство
+const FOE_HP = { hall: [90, 140, 200], wall: [30, 60], dwell: [20, 30, 40], tower: [24, 40] };
+const KINGDOM_PAL = (p) => ({ ...p, C: '#8a1e2a', c: '#5a1018', Y: '#b8343e', K: '#e0d8c8', k: '#a09888', G: '#ff5a4a', R: mix(p.R, '#5a1018', 0.45), r: mix(p.r, '#2a0a10', 0.4) });
+const FARM_SLOTS = [0, 2, 4];       // сколько рабочих помещается на ферме
+const FARM_RATE = [0, 12, 14];      // раз во сколько секунд один рабочий приносит монету
 
 // ================== ПИКСЕЛЬ-АРТ: ИНСТРУМЕНТЫ ==================
 // Все картинки рисуются кодом по пикселям: rect, px, line, ell (овал), poly (многоугольник).
@@ -1708,7 +1717,7 @@ function makeLevels(R) {
     dwell: [{ name: R.dwell, c: 4, work: 10, tex: 'dwell1', hires: ['melee'] },
             { name: R.dwell2, c: 7, work: 16, tex: 'dwell2', req: 2, hires: ['melee', 'ranged'] },
             { name: R.dwell3, c: 12, work: 24, tex: 'dwell3', req: 3, hires: ['melee', 'ranged', 'beast'] }],
-    farm:  [{ name: 'Ферма', c: 3, work: 8, tex: 'farm1', seasonal: true }, { name: 'Ферма с мельницей', c: 6, work: 12, tex: 'farm2', req: 2, seasonal: true }],
+    farm:  [{ name: 'Ферма', c: 3, work: 8, tex: 'farm1', seasonal: true, hint: 'монеты, пока на поле работают 1-2 рабочих' }, { name: 'Ферма с мельницей', c: 6, work: 12, tex: 'farm2', req: 2, seasonal: true, hint: 'до 4 рабочих, урожай быстрее' }],
     wall:  [{ name: 'Частокол', c: 2, work: 6, tex: 'wall1' }, { name: 'Каменная стена', c: 4, work: 10, tex: 'wall2', req: 2 }],
     forge: [{ name: R.forge, c: 6, work: 14, tex: 'forge1', req: 2, hint: 'все воины бьют на четверть сильнее' },
             { name: R.forge2, c: 10, work: 20, tex: 'forge2', req: 2, hires: ['siege'], hint: `откроет: ${R.units.siege.toLowerCase()}` }],
@@ -1732,7 +1741,7 @@ class GameScene extends Phaser.Scene {
   init(d) { this.rk = d.race || 'human'; this.R = RACES[this.rk]; this.LV = makeLevels(this.R); }
 
   create() {
-    const R = this.R, rk = this.rk, c = WORLD / 2;
+    const R = this.R, rk = this.rk, c = PLAYER_X;
     this.time.paused = false; this.tweens.resumeAll();
     this.center = c; this.coins = 0; this.banked = 0;
     this.dayT = 0; this.season = 0; this.dayNum = 1; this.nightCount = 0;
@@ -1761,12 +1770,14 @@ class GameScene extends Phaser.Scene {
     this.cityParts = { houses: [], towers: [], vills: [], carts: [] };
     this.deco(this.add.image(c + 140, GROUND + 2, 'sign').setOrigin(0.5, 1).setScale(S).setDepth(3));
 
-    DENS.forEach(([off, tier]) => this.addDen(c + off, tier));
-    HUTS.forEach(off => this.addHut(c + off));
+    DENS.forEach(([x, tier]) => this.addDen(x, tier));
+    for (const side of [-1, 1]) this.dens.filter(d => Math.sign(d.x - c) === side && (side < 0 || d.x < ENEMY_X)).sort((a, z) => Math.abs(a.x - c) - Math.abs(z.x - c)).forEach((d, i) => d.ring = i + 1);
+    HUTS.forEach(x => this.addHut(x));
+    this.foeInit();
     this.placeForage();
 
     for (let i = 0; i < 4; i++) this.dropCoin(c + 90 + i * 36, false);
-    for (let i = 0; i < 50; i++) this.dropCoin(c + (i % 2 ? 1 : -1) * Phaser.Math.Between(260, 8200), false);
+    for (let i = 0; i < 50; i++) { const x = c + (i % 2 ? 1 : -1) * Phaser.Math.Between(260, 8200); if (x > 300 && x < ENEMY_X - 1600) this.dropCoin(x, false); }
 
     this.player = this.add.sprite(c + 60, GROUND, 'mon_A_' + rk).setOrigin(0.5, 1).setScale(S).setDepth(8);
     this.pf = 0; this.pt = 0;
@@ -1789,6 +1800,7 @@ class GameScene extends Phaser.Scene {
     this.bankText = hud(this.add.text(14, 54, '', { ...TXT, fontSize: '18px', color: '#e0c49a' }).setOrigin(0, 0.5));
     this.crewText = hud(this.add.text(14, 76, '', { ...TXT, fontSize: '18px', color: '#d8ccaa' }).setOrigin(0, 0.5));
     hud(this.add.text(W - 20, 26, R.name, { ...TXT, fontSize: '24px' }).setOrigin(1, 0.5));
+    this.foeText = hud(this.add.text(14, 76, '', { ...TXT, fontSize: '18px', color: '#e07a7a' }).setOrigin(0, 0.5));
     this.dayText = hud(this.add.text(W / 2, 20, '', { ...TXT, fontSize: '20px', color: '#d8ccaa' }).setOrigin(0.5));
     this.musicBtn = hud(this.add.text(W - 20, 54, music.muted ? 'Музыка: выкл' : 'Музыка: вкл', { ...TXT, fontSize: '18px', color: '#d8ccaa' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
     this.musicBtn.on('pointerdown', () => this.toggleMusic());
@@ -1812,7 +1824,7 @@ class GameScene extends Phaser.Scene {
     this.applySeason(0, true);
     this.buildWeather();
     this.checkEvents();
-    this.toast(`Собери монеты и построй: ${R.hall}\nПотом найми рабочих в хижинах на карте`);
+    this.toast(`Собери монеты и построй: ${R.hall}\nНа востоке враг: ${this.foeName()}. Снеси их замок!`);
   }
 
   toggleMusic() { music.start(); const on = music.toggle(); this.musicBtn.setText(on ? 'Музыка: вкл' : 'Музыка: выкл'); }
@@ -1827,7 +1839,7 @@ class GameScene extends Phaser.Scene {
 
   // ---------- фон ----------
   drawBackdrop() {
-    const R0 = rng(7), c = WORLD / 2;
+    const R0 = rng(7), c = PLAYER_X;
     const stars = this.add.graphics().setScrollFactor(0).setDepth(55);
     stars.fillStyle(0xfff4d6, 1);
     for (let i = 0; i < 90; i++) { const s = R0() < 0.2 ? 3 : 2; stars.fillRect(Math.floor(R0() * W), 10 + Math.floor(R0() * 200), s, s); }
@@ -1852,9 +1864,9 @@ class GameScene extends Phaser.Scene {
     this.add.tileSprite(c - 880, GROUND + 3, 1760, 12, 'path').setOrigin(0).setDepth(-4);
     this.add.rectangle(0, BANK, WORLD, H - BANK, 0x1b3040).setOrigin(0).setDepth(-5);
 
-    const nearDen = x => DENS.some(([o]) => Math.abs(x - (c + o)) < 200);
-    const nearHut = x => HUTS.some(o => Math.abs(x - (c + o)) < 140);
-    const denZone = x => DENS.some(([o]) => Math.abs(x - (c + o)) < 700);
+    const nearDen = x => DENS.some(([o]) => Math.abs(x - o) < 200) || Math.abs(x - ENEMY_X) < 1080;
+    const nearHut = x => HUTS.some(o => Math.abs(x - o) < 140);
+    const denZone = x => DENS.some(([o]) => Math.abs(x - o) < 700);
     for (let x = 0; x < WORLD; x += 26 + Math.floor(R0() * 48)) {
       if (Math.abs(x - c) < 1000 || nearDen(x) || nearHut(x)) continue;
       const r = R0();
@@ -1890,8 +1902,8 @@ class GameScene extends Phaser.Scene {
       this.flies.push({ o: this.deco(this.add.rectangle(x, y, 3, 3, 0xf6e27a).setDepth(53).setAlpha(0)), x, y, ph: R0() * 6.28 });
     }
     this.bats = [];
-    for (const [off] of DENS) for (let i = 0; i < 3; i++)
-      this.bats.push({ o: this.deco(this.add.image(c + off, GROUND - 120, 'bird_A').setScale(3).setDepth(53).setAlpha(0)), x: c + off, ph: R0() * 6 });
+    for (const [dx] of DENS) for (let i = 0; i < 3; i++)
+      this.bats.push({ o: this.deco(this.add.image(dx, GROUND - 120, 'bird_A').setScale(3).setDepth(53).setAlpha(0)), x: dx, ph: R0() * 6 });
     // снег, листья, лепестки
     for (let i = 0; i < 90; i++) this.parts.push({ o: this.add.rectangle(R0() * W, R0() * H, 3, 3, 0xffffff).setScrollFactor(0).setDepth(57).setVisible(false), vy: 25 + R0() * 40, ph: R0() * 6, sw: 8 + R0() * 14 });
 
@@ -1952,7 +1964,7 @@ class GameScene extends Phaser.Scene {
   labelRects() {
     const sx = this.cameras.main.scrollX, rects = [];
     const add = (x0, y0, x1, y1) => { if (x1 > 0 && x0 < W) rects.push([Math.max(0, Math.floor(x0)), Math.floor(y0), Math.min(W, Math.ceil(x1)), Math.ceil(y1)]); };
-    for (const o of [...this.spots, ...this.dens, ...this.huts]) if (o.ui.visible) {
+    for (const o of [...this.spots, ...this.dens, ...this.huts, ...this.specials]) if (o.ui.visible) {
       const lb = o.label, w2 = lb.width / 2 + 4;
       add(o.x - sx - w2, o.ui.y - lb.height - 2, o.x - sx + w2, o.ui.y + 24);
     }
@@ -2006,7 +2018,7 @@ class GameScene extends Phaser.Scene {
     }
     o.slotsCost = cost;
   }
-  infoFor(o) { return o.isDen ? this.denInfo(o) : o.isHut ? this.hutInfo(o) : this.spotInfo(o); }
+  infoFor(o) { return o.isFoeGate ? this.foeGateInfo() : o.isDen ? this.denInfo(o) : o.isHut ? this.hutInfo(o) : this.spotInfo(o); }
   showUI(o) {
     const info = this.infoFor(o);
     if (info.mode === 'none') { o.ui.setVisible(false); return info; }
@@ -2028,7 +2040,7 @@ class GameScene extends Phaser.Scene {
       if (this.pendingAct === o) this.pendingAct = null;
       this.time.delayedCall(300, () => {
         o.locked = false; o.paid = 0; o.slotsCost = -1;
-        if (o.isDen) this.completeDen(o); else if (o.isHut) this.completeHut(o); else this.completeSpot(o, info);
+        if (o.isFoeGate) this.completeFoeAssault(); else if (o.isDen) this.completeDen(o); else if (o.isHut) this.completeHut(o); else this.completeSpot(o, info);
       });
     }
   }
@@ -2083,7 +2095,7 @@ class GameScene extends Phaser.Scene {
     if (n >= max) return { mode: 'info', label: `Воины: ${n}/${max}` + (hl < 3 ? `\nБольше мест даст: ${this.LV.hall[hl].name}` : '') + sw };
     return { mode: 'pay', label: `Нанять: ${this.unitName(o.unit)}  ${n}/${max}${sw}`, cost: U.cost, act: 'hire', unit: o.unit };
   }
-  cyclePick(s) { if (s.isDen || s.isHut || s.paid || s.type === 'bank') return; const n = this.spotOptions(s).length; if (n > 1) { s.pick = (s.pick + 1) % n; s.slotsCost = -1; } }
+  cyclePick(s) { if (s.isDen || s.isHut || s.isFoeGate || s.paid || s.type === 'bank') return; const n = this.spotOptions(s).length; if (n > 1) { s.pick = (s.pick + 1) % n; s.slotsCost = -1; } }
   completeSpot(s, info) {
     this.puff(s.x, 0xcbb894); music.sfx('build');
     if (info.act === 'hire') { this.spawnUnit(s.x, info.unit); return; }
@@ -2130,7 +2142,8 @@ class GameScene extends Phaser.Scene {
         `Готово: ${name}\nОткрылись банк и ${R.dwell3.toLowerCase()}`][s.level - 1]);
     } else if (s.type === 'dwell' || s.type === 'outpost') this.toast(`Готово: ${name}\nТеперь можно нанять: ${this.unitName(cur.hires[cur.hires.length - 1])}`);
     else if (s.type === 'tower') this.toast(`Готово: ${name}. Сама стреляет по чудовищам`);
-    else if (s.type === 'farm') { this.toast(s.level === 1 ? 'Ферма будет приносить монеты (кроме зимы)' : 'Мельница: ферма приносит монеты чаще'); this.farmTimer(s); }
+    else if (s.type === 'farm') this.toast(`Готово: ${name}
+Доход идёт, пока в поле рабочие (до ${FARM_SLOTS[s.level]})`);
     else if (s.type === 'forge') this.toast(s.level === 1 ? `Готово: ${name}\nВсе воины бьют на четверть сильнее` : `Готово: ${name}\nЗдесь можно собрать: ${R.units.siege.toLowerCase()}`);
     else if (s.type === 'guild') {
       if (s.level === 1) this.toast(`Готово: ${name}\nЗдесь можно нанять: ${R.units.mage.toLowerCase()}`);
@@ -2166,7 +2179,7 @@ class GameScene extends Phaser.Scene {
     if (s.site) { s.site = null; if (s.scaffold) { s.scaffold.destroy(); s.scaffold = null; } }
     s.level--; s.pick = 0;
     this.setLevelSprite(s);
-    if (s.level > 0) { s.maxHp = HPL[s.type][s.level - 1]; s.hp = s.maxHp; if (s.type === 'farm') this.farmTimer(s); }
+    if (s.level > 0) { s.maxHp = HPL[s.type][s.level - 1]; s.hp = s.maxHp; }
     else {
       s.hp = 0;
       if (s.timer) { s.timer.remove(); s.timer = null; }
@@ -2219,7 +2232,7 @@ class GameScene extends Phaser.Scene {
     const R0 = rng(17), c = this.center;
     for (let i = 0; i < 56; i++) {
       const side = i % 2 ? 1 : -1, dist = 1050 + Math.pow(R0(), 1.4) * 7000, x = c + side * dist;
-      if (DENS.some(([o]) => Math.abs(x - (c + o)) < 280) || HUTS.some(o => Math.abs(x - (c + o)) < 160)) continue;
+      if (x < 300 || x > ENEMY_X - 1600 || DENS.some(([o]) => Math.abs(x - o) < 280) || HUTS.some(o => Math.abs(x - o) < 160)) continue;
       const kind = R0() < 0.55 ? 'berry' : 'shroom';
       const f = { x, kind, charges: 2, taken: null };
       f.img = this.deco(this.add.image(x, GROUND + 2, kind + '@0').setOrigin(0.5, 1).setScale(S).setDepth(3));
@@ -2266,7 +2279,7 @@ class GameScene extends Phaser.Scene {
       this.units.forEach(u => { if (u.den === d) { u.mode = 'patrol'; u.den = null; } });
       this.stats.dens++;
       const left = this.dens.filter(o => o.alive).length;
-      if (!left) { this.conquer(d); this.toast('Все логова разрушены!'); this.time.delayedCall(1800, () => this.victory()); return; }
+      if (!left) this.time.delayedCall(4000, () => this.toast('Все логова разрушены. Осталось вражеское королевство'));
       this.toast(`Логово разрушено! Осталось логов: ${left}\nВ развалинах ${n} монет`);
       this.time.delayedCall(2600, () => this.retaliate(d));
       this.time.delayedCall(1200, () => this.conquer(d));
@@ -2313,6 +2326,7 @@ class GameScene extends Phaser.Scene {
     this.bankText.setText(this.bank.level ? `В банке: ${this.banked}` : '');
     const sieges = this.units.filter(u => u.kind === 'siege').length;
     this.crewText.setText(`Рабочие ${this.builders.length}/${this.maxBuilders()}    Воины ${this.armyCount()}/${this.maxUnits()}` + (this.forge.level >= 2 || sieges ? `    Машины ${sieges}/${MAX_SIEGE}` : '')).setY(this.bank.level ? 76 : 54);
+    if (this.foeText) this.foeText.setY(this.bank.level ? 98 : 76);
     if (!quiet) this.tweens.add({ targets: this.hudCoin, scale: 5, duration: 90, yoyo: true });
   }
   drawMinimap(time) {
@@ -2324,7 +2338,8 @@ class GameScene extends Phaser.Scene {
     for (const sd of ['-1', '1']) for (const wl of this.walls[sd]) if (wl) g.fillStyle(wl.level ? 0xefe3c2 : 0x6b5a48, 1).fillRect(x0 + wl.x * k - 1, y0, 2, 7);
     for (const h of this.huts) g.fillStyle(h.stock ? 0xe0c49a : 0x6b5a48, 1).fillRect(x0 + h.x * k - 2, y0 + 1, 4, 5);
     for (const d of this.dens) g.fillStyle(!d.alive ? 0x55505a : (d.enraged && Math.sin(time / 120) > 0 ? 0xffd0a0 : 0xc0392b), 1).fillRect(x0 + d.x * k - 2 - d.tier, y0 - 1 + (3 - d.tier), 4 + d.tier * 2, 4 + d.tier * 2);
-    g.fillStyle(0xff6a5a, 1); for (const e of this.enemies) if (!e.dead && e.state !== 'idle') g.fillRect(x0 + e.spr.x * k, y0 + 1, 2, 2);
+    if (this.foe.alive) { g.fillStyle(0x8a1e2a, 1).fillRect(x0 + (ENEMY_X - 940) * k, y0 + 2, 1880 * k, 4); g.fillStyle(0xe05a5a, 1).fillRect(x0 + ENEMY_X * k - 4, y0 - 2, 8, 11); }
+    for (const e of this.enemies) if (!e.dead && e.state !== 'idle') { g.fillStyle(e.fac === 'foe' ? 0xffb0b0 : 0xff6a5a, 1).fillRect(x0 + e.spr.x * k, e.fac === 'foe' ? y0 + 5 : y0 + 1, 2, 2); }
     g.fillStyle(0x8fb3ff, 1); for (const u of this.units) g.fillRect(x0 + u.spr.x * k, y0 + 4, 2, 2);
     g.fillStyle(0xd8ccaa, 1); for (const b of this.builders) g.fillRect(x0 + b.spr.x * k, y0 + 6, 1, 2);
     g.fillStyle(0xf2c14e, 1).fillRect(x0 + this.player.x * k - 2, y0 - 1, 4, 9);
@@ -2347,6 +2362,11 @@ class GameScene extends Phaser.Scene {
     if (site) return { type: 'build', spot: site, x: this.workX(site, b) };
     const dmg = this.spots.filter(s => s.level > 0 && s.hp < s.maxHp && ok(s)).sort((a, z) => Math.abs(a.x - b.spr.x) - Math.abs(z.x - b.spr.x))[0];
     if (dmg) return { type: 'repair', spot: dmg, x: this.workX(dmg, b) };
+    const fm = this.farm, onFarm = this.builders.filter(o => o !== b && o.task && o.task.type === 'farm').length;
+    if (fm.level > 0 && !fm.site && this.season !== 3 && !this.isNight && !this.waveSent && onFarm < FARM_SLOTS[fm.level]) {
+      const slot = [0, 1, 2, 3].find(i => !this.builders.some(o => o !== b && o.task && o.task.type === 'farm' && o.task.slot === i));
+      return { type: 'farm', slot, x: fm.x - fm.half + (18 + slot * 22) * (fm.level === 2 ? 0.9 : 1) };
+    }
     if (inside) return { type: 'shelter', x: c - 80 + (b.idx % 9) * 18 };
     if (this.canForage(b)) {
       const f = this.forage.filter(f => f.charges > 0 && !f.taken && Math.abs(f.x - c) < 2800).sort((a, z) => Math.abs(a.x - b.spr.x) - Math.abs(z.x - b.spr.x))[0];
@@ -2361,6 +2381,7 @@ class GameScene extends Phaser.Scene {
     for (const b of this.builders) {
       let frame = 'walk0';
       if (unsafe && b.task && ['forage', 'fish'].includes(b.task.type)) this.dropTask(b);
+      if (b.task && b.task.type === 'farm' && (this.isNight || this.waveSent || this.season === 3 || this.farm.level === 0 || this.farm.site)) b.task = null;
       if (unsafe && b.task && ['build', 'repair'].includes(b.task.type)) { const [pl, pr] = this.perimeter(); if (b.task.spot.x < pl - 60 || b.task.spot.x > pr + 60) b.task = null; }
       if (unsafe && b.task && b.task.type === 'shelter') { b.evalT -= dt; if (b.evalT <= 0) { b.evalT = 1; const t = this.chooseTask(b, true); if (t.type !== 'shelter') b.task = t; } }
       if (!unsafe && b.task && b.task.type === 'shelter') b.task = null;
@@ -2369,6 +2390,7 @@ class GameScene extends Phaser.Scene {
         if (b.evalT <= 0) {
           b.evalT = 1;
           if (this.spots.some(s => s.site || (s.level > 0 && s.hp < s.maxHp))) b.task = null;
+          else if (this.farm.level > 0 && this.season !== 3 && this.builders.filter(o => o.task && o.task.type === 'farm').length < FARM_SLOTS[this.farm.level]) b.task = null;
           else if (this.canForage(b) && this.forage.some(f => f.charges > 0 && !f.taken && Math.abs(f.x - c) < 2800)) b.task = null;
         }
       }
@@ -2387,6 +2409,9 @@ class GameScene extends Phaser.Scene {
         } else if (tk.type === 'repair') {
           if (tk.spot.level === 0 || tk.spot.hp >= tk.spot.maxHp) b.task = null;
           else { b.spr.setFlipX(tk.spot.x < b.spr.x); frame = working(true); tk.spot.hp = Math.min(tk.spot.maxHp, tk.spot.hp + dt * 1.5); this.drawBar(tk.spot); }
+        } else if (tk.type === 'farm') {
+          b.spr.setFlipX(b.idx % 2 === 0); frame = working(false); b.t += dt;
+          if (b.t > FARM_RATE[this.farm.level]) { b.t = 0; this.dropCoin(b.spr.x + Phaser.Math.Between(-16, 16), true, GROUND - 70); music.sfx('coin'); }
         } else if (tk.type === 'forage') {
           frame = working(false); b.t += dt;
           if (b.t > 3) {
@@ -2443,6 +2468,7 @@ class GameScene extends Phaser.Scene {
   aoe(x, r, dmg, denToo, denMul = 1) {
     for (const e of this.enemies) if (!e.dead && Math.abs(e.spr.x - x) < r) this.damageEnemy(e, dmg);
     if (denToo) for (const d of this.dens) if (d.alive && Math.abs(d.x - x) < d.half + r) this.damageDen(d, dmg * denMul);
+    if (denToo && this.foe && this.foe.alive) for (const b of this.foe.spots) if (b.level && Math.abs(b.x - x) < b.half + r) this.damageFoeBuilding(b, dmg * denMul);
   }
   shoot(u, tx, foe, den) {
     const dmg = u.U.dmg * this.dmgMul(), flip = tx < u.spr.x;
@@ -2451,7 +2477,7 @@ class GameScene extends Phaser.Scene {
       const a = this.add.image(u.spr.x, GROUND - 42, key).setScale(S).setDepth(9).setFlipX(flip);
       music.sfx('shoot');
       this.tweens.add({ targets: a, x: tx, y: GROUND - 30, duration: Math.abs(tx - u.spr.x) * 1.6 + 80, ease: 'Sine.in',
-        onComplete: () => { a.destroy(); if (foe && !foe.dead) this.damageEnemy(foe, dmg); if (den) this.damageDen(den, dmg); } });
+        onComplete: () => { a.destroy(); if (foe && !foe.dead) this.damageEnemy(foe, dmg); if (den) (den.foe ? this.damageFoeBuilding(den, dmg) : this.damageDen(den, dmg)); } });
     } else if (u.kind === 'mage') {
       u.cast = 0.35;
       const o = this.add.image(u.spr.x + (flip ? -18 : 18), GROUND - 60, 'orb_' + this.rk).setScale(S).setDepth(9);
@@ -2483,8 +2509,9 @@ class GameScene extends Phaser.Scene {
     for (const u of this.units) {
       const U = u.U, [a, b] = this.patrolBounds(u);
       u.atk -= dt; u.cast -= dt;
-      if (u.mode === 'assault' && (this.isNight || this.waveSent || !u.den || !u.den.alive)) { u.mode = 'patrol'; u.den = null; }
+      if (u.mode === 'assault' && (((this.isNight || this.waveSent) && !(u.den && u.den.isFoeTarget)) || !u.den || !u.den.alive)) { u.mode = 'patrol'; u.den = null; }
       if (u.mode === 'follow') { if (this.followUnit(u, dt)) continue; }
+      const heavy = ['beast', 'tbrute', 'tfiend'].includes(u.kind) ? 'heavy' : 'slash';
       let moveDir = 0, speed = 55;
       const guard = this.isNight || this.waveSent;
       const sight = u.kind === 'siege' ? U.range : (u.mode === 'assault' ? 280 : (guard ? 340 : 380));
@@ -2492,12 +2519,14 @@ class GameScene extends Phaser.Scene {
       const foeOk = foe && (u.mode === 'assault' || Math.abs(foe.spr.x - c) < 1100);
       if (foeOk) {
         const dx = foe.spr.x - u.spr.x; u.spr.setFlipX(dx < 0);
-        if (Math.abs(dx) < U.range) { if (u.atk <= 0) { u.atk = U.cd; if (U.shot) this.shoot(u, foe.spr.x, foe, null); else this.damageEnemy(foe, U.dmg * this.dmgMul()); } }
+        if (Math.abs(dx) < U.range) { if (u.atk <= 0) { u.atk = U.cd; if (U.shot) this.shoot(u, foe.spr.x, foe, null); else { this.meleeFx(u.spr, foe.spr.x, heavy); this.damageEnemy(foe, U.dmg * this.dmgMul()); } } }
         else if (u.kind !== 'siege' || u.mode === 'assault') { moveDir = Math.sign(dx); speed = U.speed; }
+      } else if (u.mode === 'assault' && u.den && u.den.isFoeTarget) {
+        if (this.assaultFoe(u, dt)) continue;
       } else if (u.mode === 'assault') {
         const dx = u.den.x - u.spr.x;
         const reach = U.shot ? U.range * 0.75 : u.den.half * 0.6;
-        if (Math.abs(dx) < reach) { u.spr.setFlipX(dx < 0); if (u.atk <= 0) { u.atk = U.cd; if (U.shot) this.shoot(u, u.den.x, null, u.den); else this.damageDen(u.den, U.dmg * this.dmgMul()); } }
+        if (Math.abs(dx) < reach) { u.spr.setFlipX(dx < 0); if (u.atk <= 0) { u.atk = U.cd; if (U.shot) this.shoot(u, u.den.x, null, u.den); else { this.meleeFx(u.spr, u.den.x, heavy); this.damageDen(u.den, U.dmg * this.dmgMul()); } } }
         else { moveDir = Math.sign(dx); speed = Math.abs(dx) > 600 ? (u.kind === 'siege' ? 80 : 120) : U.speed; }
       } else if (guard) {
         const dx = this.guardPost(u) - u.spr.x;
@@ -2520,11 +2549,11 @@ class GameScene extends Phaser.Scene {
   }
 
   // ---------- чудовища ----------
-  spawnEnemy(den, state, kind = 'imp', rage = false) {
+  spawnEnemy(den, state, kind = 'imp', rage = false, tx = this.center) {
     const F = FOES[kind];
     const spr = this.add.sprite(den.x + Phaser.Math.Between(-70, 70), GROUND, `${F.tex}_A`).setOrigin(0.5, 1).setScale(S).setDepth(7).setAlpha(0);
     this.tweens.add({ targets: spr, alpha: 1, duration: 500 });
-    this.enemies.push({ spr, den, kind, F, hp: F.hp, state, atk: 0, ft: 0, f: 0, loot: 0, lootImgs: [], dead: false, flash: 0, target: den.x, wait: Math.random() * 2, rage });
+    this.enemies.push({ spr, den, kind, F, fac: 'beast', tk: F.tex, ts: '', tx, hp: F.hp, state, atk: 0, ft: 0, f: 0, loot: 0, lootImgs: [], dead: false, flash: 0, target: den.x, wait: Math.random() * 2, rage });
   }
   waveFor(d, nn, winter) {
     let imps = 0, brutes = 0, fiends = 0;
@@ -2543,17 +2572,18 @@ class GameScene extends Phaser.Scene {
     const nn = this.nightCount + 1, winter = this.season === 3, angry = !!this.storm;
     let total = 0, rage = null;
     const cap = this.doom ? 90 : (winter ? 48 : 36) + (angry ? 14 : 0);
-    if (this.doom) { this.bloodNight = true; music.setMode('blood'); this.moon.setTexture('moon_red'); this.enemies.forEach(e => { if (e.state === 'idle') { e.state = 'advance'; e.rage = true; } }); }
+    if (this.doom) { this.bloodNight = true; music.setMode('blood'); this.moon.setTexture('moon_red'); this.enemies.forEach((e, i) => { if (e.fac === 'beast' && e.state === 'idle') { e.state = 'advance'; e.rage = true; e.tx = this.denTarget(e.den, i); } }); }
     for (const d of this.dens) {
       if (!d.alive) continue;
       let list = this.doom ? this.waveFor(d, nn + 8, true).concat(this.waveFor(d, nn + 4, true)) : this.waveFor(d, nn, winter);
       if (angry && !this.doom) list = list.concat(list.slice(0, Math.ceil(list.length / 2)));
       list = list.slice(0, Math.max(0, cap - total));
-      list.forEach((kind, i) => this.time.delayedCall(i * (this.doom ? 700 : 1300), () => { if (d.alive && !this.over) this.spawnEnemy(d, 'advance', kind, angry || this.doom); }));
+      list.forEach((kind, i) => this.time.delayedCall(i * (this.doom ? 700 : 1300), () => { if (d.alive && !this.over) this.spawnEnemy(d, 'advance', kind, angry || this.doom, this.denTarget(d, i)); }));
       total += list.length;
       if (d.enraged) { rage = d; this.launchRage(d); }
     }
     if (this.guild.level >= 2) this.lightningReady = true;
+    this.planFoeRaid();
     if (this.doom) { music.sfx('doom'); this.toast(`Конец света! Все чудовища идут на вас: ${total}\nПродержись до рассвета`); }
     else if (rage) { music.sfx('rage'); this.toast(`Кровавая ночь! Логово-близнец ${rage.x < this.center ? 'слева' : 'справа'} мстит\nИз логов выходят чудовища: ${total}+`); }
     else if (total) { music.sfx('horn'); this.toast(`Сумерки. Из логов выходят чудовища: ${total}${angry ? '\nВ бурю они злее' : (winter ? '\nЗимой их больше' : '')}\nРабочие уходят за стены`); }
@@ -2562,7 +2592,8 @@ class GameScene extends Phaser.Scene {
   startDay() {
     this.isNight = false; this.waveSent = false; this.bloodNight = false;
     music.setMode('day'); this.moon.setTexture('moon');
-    this.enemies.forEach(e => { if (e.state === 'advance') e.state = 'flee'; });
+    this.enemies.forEach(e => { if (e.fac === 'beast' && e.state === 'advance') e.state = 'flee'; });
+    this.endFoeRaid(); this.foeDawn();
     this.dayNum = this.nightCount + 1;
     this.doom = false;
     for (const h of this.huts) if (h.stock < 3) { h.stock++; this.addVagrant(h); }
@@ -2609,8 +2640,8 @@ class GameScene extends Phaser.Scene {
     e.hp -= dmg; music.sfx('hit'); e.flash = 0.09;
     if (e.hp <= 0) {
       music.sfx('die'); this.puff(e.spr.x, 0x4a2a58); this.stats.killed++;
-      for (let i = 0; i < e.loot; i++) this.dropCoin(e.spr.x + (i - e.loot / 2) * 10, true, GROUND - 60);
-      if (e.kind !== 'imp') this.dropCoin(e.spr.x + 12, true, GROUND - 60);
+      if (e.spr.x < ENEMY_X - 1500) for (let i = 0; i < e.loot; i++) this.dropCoin(e.spr.x + (i - e.loot / 2) * 10, true, GROUND - 60);
+      if (e.kind !== 'imp' && e.spr.x < ENEMY_X - 1500) this.dropCoin(e.spr.x + 12, true, GROUND - 60);
       this.removeEnemy(e);
     }
   }
@@ -2639,14 +2670,20 @@ class GameScene extends Phaser.Scene {
     for (const e of this.enemies) {
       if (e.dead) continue;
       const F = e.F;
-      e.atk -= dt;
+      e.atk -= dt; e.cast -= dt;
       e.ft += dt; if (e.ft > (e.kind === 'imp' ? 0.15 : 0.22)) { e.ft = 0; e.f ^= 1; }
-      if (e.flash > 0) { e.flash -= dt; e.spr.setTexture(`${F.tex}_X`); } else e.spr.setTexture(`${F.tex}_${e.f ? 'B' : 'A'}`);
+      let fr = e.f ? 'B' : 'A';
+      if (e.kind === 'mage' && e.cast > 0) fr = 'C';
+      if (e.flash > 0) { e.flash -= dt; fr = 'X'; }
+      e.spr.setTexture(`${e.tk}_${fr}${e.ts}`);
       const top = e.spr.y - e.spr.displayHeight - 8;
       e.lootImgs.forEach((im, i) => im.setPosition(e.spr.x + (i - (e.lootImgs.length - 1) / 2) * 8, top - i * 3));
-      const u = this.units.find(u => Math.abs(u.spr.x - e.spr.x) < 24);
-      if (u && e.state !== 'flee') { if (e.atk <= 0) { e.atk = F.cd; this.damageUnit(u, F.steal); } continue; }
-
+      if (e.fac === 'foe') { this.updateFoeUnit(e, dt); continue; }
+      // чудовище бьёт любого противника вплотную: наших воинов и воинов врага
+      if (e.state !== 'flee') {
+        const opp = this.nearestOpp(e, 24);
+        if (opp) { if (e.atk <= 0) { e.atk = F.cd; this.meleeFx(e.spr, opp.spr.x, 'claw'); this.hurt(opp, F.steal); } continue; }
+      }
       if (e.state === 'flee') {
         const home = e.den.alive ? e.den.x : (e.spr.x < c ? 0 : WORLD);
         const dx = home - e.spr.x; e.spr.setFlipX(dx < 0);
@@ -2660,7 +2697,7 @@ class GameScene extends Phaser.Scene {
         continue;
       }
       if (e.state === 'idle') {
-        const near = this.nearestUnitTo(e.spr.x, 220);
+        const near = this.nearestOpp(e, 220);
         if (near) { const dx = near.spr.x - e.spr.x; e.spr.setFlipX(dx < 0); e.spr.x += Math.sign(dx) * F.spd * dt; continue; }
         if (e.wait > 0) { e.wait -= dt; continue; }
         const dx = e.target - e.spr.x;
@@ -2668,14 +2705,22 @@ class GameScene extends Phaser.Scene {
         else { e.spr.x += Math.sign(dx) * 30 * dt; e.spr.setFlipX(dx < 0); }
         continue;
       }
-      // наступление на лагерь
+      // наступление на вражеское королевство
+      if (e.tx === ENEMY_X && this.foe.alive) {
+        const dir = Math.sign(ENEMY_X - e.spr.x) || 1; e.spr.setFlipX(dir < 0);
+        const bl = this.blockingFoe(e.spr.x, dir);
+        if (bl) { if (e.atk <= 0) { e.atk = F.cd + 0.1; this.meleeFx(e.spr, bl.x, 'claw'); this.damageFoeBuilding(bl, F.bld * 0.6); } continue; }
+        e.spr.x += dir * (Math.abs(e.spr.x - ENEMY_X) > 1400 ? F.far : F.spd) * (e.rage ? 1.15 : 1) * dt;
+        continue;
+      }
+      // наступление на наш лагерь
       const dir = Math.abs(e.spr.x - c) < 130 ? (Math.sign(this.player.x - e.spr.x) || 1) : Math.sign(c - e.spr.x);
       e.spr.setFlipX(dir < 0);
       const coin = this.groundCoins.find(cn => cn.ready && Math.abs(cn.img.x - e.spr.x) < 16);
       if (coin) { this.removeGroundCoin(coin); coin.img.destroy(); this.grabLoot(e, 1); continue; }
-      if (Math.abs(this.player.x - e.spr.x) < 26 && e.atk <= 0) { e.atk = 1.2; this.hitPlayer(e); if (e.state === 'flee' || this.over) continue; }
+      if (Math.abs(this.player.x - e.spr.x) < 26 && e.atk <= 0) { e.atk = 1.2; this.meleeFx(e.spr, this.player.x, 'claw'); this.hitPlayer(e); if (e.state === 'flee' || this.over) continue; }
       const bl = this.blockingBuilding(e.spr.x, dir);
-      if (bl) { if (e.atk <= 0) { e.atk = F.cd + 0.1; this.damageBuilding(bl, F.bld); } continue; }
+      if (bl) { if (e.atk <= 0) { e.atk = F.cd + 0.1; this.meleeFx(e.spr, bl.x, 'claw'); this.damageBuilding(bl, F.bld); } continue; }
       const far = Math.abs(e.spr.x - c) > 1400;
       e.spr.x += dir * (far ? F.far : F.spd) * (e.rage ? 1.15 : 1) * dt;
     }
@@ -2711,7 +2756,7 @@ class GameScene extends Phaser.Scene {
   showPanel(title, sub, lines, buttons, color = '#f2c14e') {
     this.closePanel();
     this.tweens.killTweensOf(this.toastText); this.toastText.setAlpha(0);
-    for (const o of [...this.spots, ...this.dens, ...this.huts]) o.ui.setVisible(false);
+    for (const o of [...this.spots, ...this.dens, ...this.huts, ...this.specials]) o.ui.setVisible(false);
     const p = this.add.container(0, 0).setScrollFactor(0).setDepth(200);
     p.add(this.add.rectangle(0, 0, W, H, 0x0a0e14, 0.72).setOrigin(0).setInteractive());
     const y0 = H / 2 - 150;
@@ -2727,7 +2772,7 @@ class GameScene extends Phaser.Scene {
     this.panelOpen = { p, buttons };
   }
   closePanel() { if (this.panelOpen) { this.panelOpen.p.destroy(); this.panelOpen = null; } }
-  statLines() { return [`Дней продержались: ${this.dayNum}`, `Логов разрушено: ${this.stats.dens} из ${DENS.length}`, `Чудовищ повержено: ${this.stats.killed}`]; }
+  statLines() { return [`Дней продержались: ${this.dayNum}`, `Логов разрушено: ${this.stats.dens} из ${DENS.length}`, `Врагов повержено: ${this.stats.killed}`, this.foe && this.foe.alive ? `Вражеский замок: уровень ${this.foe.hall.level}` : 'Вражеский замок разрушен']; }
   gameOver() {
     if (this.over) return;
     this.over = true; this.setDanger(false, true);
@@ -2740,7 +2785,7 @@ class GameScene extends Phaser.Scene {
   victory() {
     if (this.won || this.over) return;
     this.won = true; music.sfx('victory');
-    this.showPanel('Земли очищены!', 'Все логова чудовищ разрушены', this.statLines(),
+    this.showPanel('Вражеское королевство пало!', `${this.foeName()} повержены, земли твои`, this.statLines(),
       [{ label: 'Играть дальше (Enter)', fn: () => this.closePanel() }, { label: 'Новая игра (R)', fn: () => this.scene.start('select') }]);
   }
   togglePause() {
@@ -2867,10 +2912,10 @@ class GameScene extends Phaser.Scene {
     }
 
     // ближайшая табличка
-    const all = [...this.spots, ...this.dens, ...this.huts];
+    const all = [...this.spots, ...this.dens, ...this.huts, ...this.specials];
     let near = null, best = 1e9;
     for (const o of all) {
-      const d = Math.abs(o.x - this.player.x), r = o.isDen ? 140 : o.isHut ? 110 : Math.max(75, (o.half || 0) * 0.8);
+      const d = Math.abs(o.x - this.player.x), r = o.isDen || o.isFoeGate ? 140 : o.isHut ? 110 : Math.max(75, (o.half || 0) * 0.8);
       if (d < r && d < best) { best = d; near = o; }
     }
     this.near = near;
@@ -2907,6 +2952,8 @@ class GameScene extends Phaser.Scene {
     this.hornCd -= dt;
     this.updateRetinue(dt);
     this.updateTowers(dt);
+    this.updateFoe(dt);
+    this.updateFoeTowers(dt);
     this.updateCityLife(dt, time);
     this.updateWeather(dt, time);
     this.updateShadows();
@@ -2917,6 +2964,7 @@ class GameScene extends Phaser.Scene {
       if (time - this.lastAlarm > 2600 && this.enemies.some(e => !e.dead && e.state === 'advance' && Math.abs(e.spr.x - this.player.x) < 500)) { this.lastAlarm = time; music.sfx('alarm'); }
     } else if (this.vignette.alpha > 0) this.vignette.setAlpha(Math.max(0, this.vignette.alpha - dt * 2));
     this.boltText.setText(this.guild.level >= 2 ? (this.aimBolt ? 'Молния: укажи место' : this.lightningReady ? ((this.isNight || this.waveSent) ? 'Молния готова: Пробел или щелчок' : 'Молния готова к ночи') : 'Молния использована') : '');
+    this.foeText.setText(this.foe.alive ? `Враг: ${this.foeName()}, замок ${this.foe.hall.level}` + (this.enemies.some(e => e.fac === 'foe' && e.state === 'raid') ? ', набег!' : '') : 'Враг повержен');
     this.hornBtn.setText(this.units.some(u => u.mode === 'follow') ? `Свита: ${Math.ceil(this.retinueT)} с` : 'Рог: E');
 
     this.updateEnemies(dt);
@@ -2949,7 +2997,7 @@ class GameScene extends Phaser.Scene {
     const op = this.addSpot('outpost', d.x, false, lv);
     op.tier = d.tier; this.measure(op, this.texFor(op, 1)); this.placeUI(op, op.h);
     this.addSpot('tower', d.x - side * 320);
-    if (WALL_LINES[String(side)][d.tier] != null && !this.walls[String(side)][d.tier]) this.addWallSpot(side, d.tier);
+    if (d.ring && WALL_LINES[String(side)][d.ring] != null && !this.walls[String(side)][d.ring]) this.addWallSpot(side, d.ring);
     this.refreshStakes();
     this.time.delayedCall(4200, () => { if (!this.over) this.toast(`Земля у логова свободна. Здесь можно построить:\n${R.outpost.toLowerCase()}, дозорную башню и новую стену`); });
   }
@@ -3029,7 +3077,7 @@ class GameScene extends Phaser.Scene {
     const U = u.U, foe = this.nearestEnemy(u.spr.x, Math.max(300, U.range));
     if (foe) {
       const dx = foe.spr.x - u.spr.x; u.spr.setFlipX(dx < 0);
-      if (Math.abs(dx) < U.range) { if (u.atk <= 0) { u.atk = U.cd; this.retinueT = RETINUE_CALM; if (U.shot) this.shoot(u, foe.spr.x, foe, null); else this.damageEnemy(foe, U.dmg * this.dmgMul()); } this.animUnit(u, 0); return true; }
+      if (Math.abs(dx) < U.range) { if (u.atk <= 0) { u.atk = U.cd; this.retinueT = RETINUE_CALM; if (U.shot) this.shoot(u, foe.spr.x, foe, null); else { this.meleeFx(u.spr, foe.spr.x, ['beast', 'tbrute', 'tfiend'].includes(u.kind) ? 'heavy' : 'slash'); this.damageEnemy(foe, U.dmg * this.dmgMul()); } } this.animUnit(u, 0); return true; }
       this.retinueT = Math.max(this.retinueT, RETINUE_CALM * 0.6);
       this.animUnit(u, Math.sign(dx) * (u.kind === 'siege' ? 80 : 140) * dt); return true;
     }
@@ -3066,7 +3114,7 @@ class GameScene extends Phaser.Scene {
   // ================== МЫШЬ И КАСАНИЯ ==================
   objectAt(wx, y) {
     let best = null, bd = 1e9;
-    for (const o of [...this.spots, ...this.dens, ...this.huts]) {
+    for (const o of [...this.spots, ...this.dens, ...this.huts, ...this.specials]) {
       if (o.isDen && !o.alive) continue;
       const hw = Math.max(o.half || 50, 50) + 10, top = o.ui.visible ? o.ui.y - o.label.height - 12 : (o.topY || GROUND - 80) - 14, d = Math.abs(wx - o.x);
       if (d < hw && y > top && y < GROUND + 14 && d < bd) { bd = d; best = o; }
@@ -3198,6 +3246,312 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: f, x: x1, y: y1, duration: 220, ease: 'Quad.out', onComplete: () => f.destroy() });
   }
 }
+
+// ================== ВРАЖЕСКОЕ КОРОЛЕВСТВО ==================
+// Народ врага выбирается случайно; его знамёна и одежда всегда багровые, чтобы не спутать со своими.
+function buildFoeTextures(scene, k) {
+  const p = KINGDOM_PAL(RACES[k].pal), st = RACES[k].style, sfx = `_${k}_foe`;
+  for (const [key, w, h, fn, frames] of [['mel', 16, 20, drawMelee, 2], ['rng', 16, 20, drawRanged, 2], ['bst', 27, 24, drawBeast, 2], ['mag', 16, 22, drawMage, 3]]) {
+    ['A', 'B', 'C'].slice(0, frames).forEach((fr, i) => paintTex(scene, `${key}_${fr}${sfx}`, w, h, P => fn(P, p, st, i)));
+    silhouette(scene, `${key}_A${sfx}`, `${key}_X${sfx}`, '#ffffff');
+  }
+  paintTex(scene, 'orb' + sfx, 6, 6, P => { P.ell(3, 3, 3, 3, p.G); P.ell(3, 3, 1.6, 1.6, '#ffffff'); });
+  paintTex(scene, 'hall1' + sfx, 48, 44, P => paintShelter(P, 48, 44, p, st, true, 3));
+  paintTex(scene, 'hall2' + sfx, 64, 58, P => paintCastle(P, 64, 58, p, st, 2, 5));
+  paintTex(scene, 'hall3' + sfx, 79, 70, P => paintCastle(P, 79, 70, p, st, 3, 6));
+  paintTex(scene, 'dwell1' + sfx, 38, 30, P => paintShelter(P, 38, 30, p, st, false, 9));
+  paintTex(scene, 'dwell2' + sfx, 50, 32, P => paintDwell(P, 50, 32, p, st, 2));
+  paintTex(scene, 'dwell3' + sfx, 62, 40, P => paintDwell(P, 62, 40, p, st, 3));
+  paintTex(scene, 'wall1' + sfx, 14, 25, P => paintWall(P, 14, 25, p, 1));
+  paintTex(scene, 'wall2' + sfx, 16, 29, P => paintWall(P, 16, 29, p, 2));
+  paintTex(scene, 'tower1' + sfx, 16, 42, P => paintTower(P, 16, 42, p, st, 1));
+  paintTex(scene, 'tower2' + sfx, 20, 50, P => paintTower(P, 20, 50, p, st, 2));
+}
+const FOE_TEX = { hall: ['hall1', 'hall2', 'hall3'], wall: ['wall1', 'wall2'], dwell: ['dwell1', 'dwell2', 'dwell3'], tower: ['tower1', 'tower2'] };
+
+Object.assign(GameScene.prototype, {
+  // ---------- анимация ближнего боя: выпад и след удара ----------
+  meleeFx(spr, tx, kind = 'slash') {
+    if (!spr || !spr.active) return;
+    const dir = Math.sign(tx - spr.x) || (spr.flipX ? -1 : 1);
+    spr.setOrigin(0.5 - dir * 0.14, 1); spr.setAngle(dir * 7);
+    this.time.delayedCall(120, () => { if (spr.active) { spr.setOrigin(0.5, 1); spr.setAngle(0); } });
+    const y = GROUND - Math.min(70, spr.displayHeight * 0.55), x = tx - dir * 4, g = this.add.graphics().setDepth(10);
+    if (kind === 'claw') {
+      g.lineStyle(3, 0xff6a5a, 0.95);
+      for (let i = -1; i <= 1; i++) g.lineBetween(x - 9, y - 12 + i * 8, x + 9, y + 2 + i * 8);
+    } else {
+      const r = kind === 'heavy' ? 30 : 20, cx = x - dir * 12;
+      g.lineStyle(kind === 'heavy' ? 6 : 4, 0xffffff, 0.95); g.beginPath();
+      if (dir > 0) g.arc(cx, y, r, -1.25, 0.75); else g.arc(cx, y, r, Math.PI - 0.75, Math.PI + 1.25);
+      g.strokePath();
+      g.lineStyle(2, 0xf2e6a0, 0.8); g.beginPath();
+      if (dir > 0) g.arc(cx, y, r - 5, -1.0, 0.55); else g.arc(cx, y, r - 5, Math.PI - 0.55, Math.PI + 1.0);
+      g.strokePath();
+    }
+    this.tweens.add({ targets: g, alpha: 0, duration: 170, onComplete: () => g.destroy() });
+    const sp = this.add.rectangle(tx, y + Phaser.Math.Between(-6, 6), 6, 6, 0xfff1b0).setDepth(10);
+    this.tweens.add({ targets: sp, scale: 0.2, alpha: 0, x: tx + dir * 12, duration: 200, onComplete: () => sp.destroy() });
+  },
+  // урон по любой цели: свой воин или существо из списка врагов
+  hurt(t, dmg) { if (t.fac) this.damageEnemy(t, dmg); else if (this.units.includes(t)) this.damageUnit(t, dmg); },
+
+  // ---------- постройки врага ----------
+  foeInit() {
+    const keys = Object.keys(RACES).filter(k => k !== this.rk), race = keys[Math.floor(Math.random() * keys.length)];
+    buildFoeTextures(this, race);
+    const f = this.foe = { race, R: RACES[race], gold: 6, spots: [], alive: true, think: 4, busy: false, lastRaid: 0, raidGap: 3, dmgMul: 1, raidAt: null };
+    const X = ENEMY_X;
+    const bg = `cwall1_${race}_x`, th = this.textures.get(bg).getSourceImage().height;
+    f.cityWall = this.add.tileSprite(X - 916, GROUND + 3, 1832, th, bg).setOrigin(0, 1).setDepth(-9);
+    const R0 = rng(4242);
+    f.houses = [];
+    for (let x = X - 860; x < X + 860; x += 90 + Math.floor(R0() * 80)) {
+      if ([0, -940, 940, 420, -700, 700, -440].some(o => Math.abs(x - (X + o)) < 90)) continue;
+      f.houses.push(this.add.image(x, GROUND + 3, `townhouse_${Math.floor(R0() * 4)}_${race}`).setOrigin(0.5, 1).setScale(S).setDepth(-7));
+    }
+    f.farmImg = this.add.image(X - 440, GROUND + 1, `farm1_${race}@0`).setOrigin(0.5, 1).setScale(S).setDepth(4);
+    const mk = (type, dx, lvl) => { const b = { foe: true, type, x: X + dx, level: 0, hp: 0, maxHp: 0, img: null, half: 30, h: 60 }; b.bar = this.add.graphics().setDepth(19); f.spots.push(b); this.foeSetLevel(b, lvl); return b; };
+    f.hall = mk('hall', 0, 1); f.wallL = mk('wall', -940, 1); f.wallR = mk('wall', 940, 1);
+    f.dwell = mk('dwell', 420, 1); f.towerL = mk('tower', -700, 1); f.towerR = mk('tower', 700, 1);
+    f.fire = this.add.image(X, GROUND + 1, 'fire_0').setOrigin(0.5, 1).setScale(S).setDepth(6);
+    f.glow = this.add.image(X, GROUND - 24, 'glow').setScale(2.6).setBlendMode(Phaser.BlendModes.ADD).setDepth(51);
+    for (let i = 0; i < 6; i++) this.spawnFoeUnit(i % 3 === 2 ? 'ranged' : 'melee', X + Phaser.Math.Between(-300, 300));
+    // ворота для штурма (табличка у стены, обращённой к нам)
+    this.foeGate = { isFoeGate: true, x: X - 1120, half: 60, topY: GROUND - 90 };
+    this.makeUI(this.foeGate, 90);
+    this.foeTarget = { isFoeTarget: true, get alive() { return f.alive; }, x: X, half: 40 };
+    this.specials = [this.foeGate];
+  },
+  foeName() { return this.foe.R.name; },
+  foeSetLevel(b, lvl) {
+    const f = this.foe;
+    if (b.img) b.img.destroy(); b.img = null;
+    b.level = lvl;
+    if (lvl > 0) {
+      const key = `${FOE_TEX[b.type][lvl - 1]}_${f.race}_foe`;
+      b.img = this.add.image(b.x, GROUND + 1, key).setOrigin(0.5, 1).setScale(S).setDepth(4);
+      b.h = b.img.displayHeight; b.half = b.img.displayWidth / 2;
+      b.maxHp = FOE_HP[b.type][lvl - 1]; b.hp = b.maxHp;
+    } else { b.hp = 0; b.maxHp = 0; }
+    this.drawFoeBar(b);
+  },
+  drawFoeBar(b) {
+    b.bar.clear();
+    if (!b.level || b.hp >= b.maxHp) return;
+    const y = GROUND - b.h - 14;
+    b.bar.fillStyle(0x141d21, 0.85).fillRect(b.x - 25, y, 50, 7).fillStyle(0x8a1e2a, 1).fillRect(b.x - 24, y + 1, 48 * Math.max(0, b.hp) / b.maxHp, 5);
+  },
+  damageFoeBuilding(b, dmg) {
+    const f = this.foe;
+    if (!f.alive || !b.level) return;
+    b.hp -= dmg; music.sfx('hit'); this.drawFoeBar(b);
+    if (b.img) this.tweens.add({ targets: b.img, x: b.x + 3, duration: 40, yoyo: true, onComplete: () => b.img && (b.img.x = b.x) });
+    if (b.hp > 0) return;
+    this.puff(b.x, 0x6b5a48, 16, b.half); music.sfx('build');
+    if (b.type === 'hall' && b.level === 1) { this.foeFall(); return; }
+    this.foeSetLevel(b, b.level - 1);
+    if (b.type === 'hall') this.toast(`Вражеский замок пошатнулся! Осталось уровней: ${b.level}`);
+  },
+  foeFall() {
+    const f = this.foe; f.alive = false;
+    if (f.hall.img) f.hall.img.destroy(); f.hall.level = 0; f.hall.bar.clear();
+    this.add.image(f.hall.x, GROUND + 3, `ruin@${this.season}`).setOrigin(0.5, 1).setScale(S + 1).setDepth(4);
+    this.puff(f.hall.x, 0x6b5a48, 30, 120); this.cameras.main.shake(700, 0.012);
+    f.fire.destroy(); f.glow.destroy();
+    for (const e of this.enemies) if (e.fac === 'foe' && !e.dead) { this.puff(e.spr.x, 0x8a1e2a, 6, 14); this.removeEnemy(e); }
+    for (const e of this.enemies) if (e.fac === 'beast' && e.tx === ENEMY_X) e.tx = this.center;
+    this.foeGate.ui.setVisible(false);
+    this.time.delayedCall(1500, () => this.victory());
+  },
+  nextFoeBuilding(x, dir) {
+    let best = null, bd = 1e9;
+    for (const b of this.foe.spots) { if (!b.level) continue; const d = (b.x - x) * dir; if (d > -b.half && d < bd) { bd = d; best = b; } }
+    return best;
+  },
+  blockingFoe(x, dir) {
+    let best = null, bd = 1e9;
+    for (const b of this.foe.spots) { if (!b.level) continue; const d = (b.x - x) * dir; if (d > -b.half && d < b.half + 6 && d < bd) { bd = d; best = b; } }
+    return best;
+  },
+
+  // ---------- войско врага ----------
+  foeUnits() { return this.enemies.filter(e => e.fac === 'foe' && !e.dead); },
+  spawnFoeUnit(kind, x) {
+    const f = this.foe, U = UNITS[kind], ts = `_${f.race}_foe`;
+    const spr = this.add.sprite(x, GROUND, `${U.tex}_A${ts}`).setOrigin(0.5, 1).setScale(S).setDepth(7);
+    const F = { tex: U.tex, hp: U.hp, steal: kind === 'beast' ? 2 : 1, bld: Math.max(1, U.dmg), cd: U.cd, spd: U.speed, far: 200 };
+    this.enemies.push({ spr, fac: 'foe', kind, U, F, tk: U.tex, ts, hp: U.hp, state: 'guard', atk: 0, ft: 0, f: 0, loot: 0, lootImgs: [], dead: false, flash: 0, cast: 0,
+      side: this.foeSide(), post: Math.random() });
+  },
+  // новый воин встаёт к той стене, где защитников меньше
+  foeSide() {
+    let l = 0, r = 0; for (const o of this.enemies) if (o.fac === 'foe' && !o.dead && o.state === 'guard') { if (o.side < 0) l++; else r++; }
+    return l === r ? (Math.random() < 0.5 ? -1 : 1) : (l < r ? -1 : 1);
+  },
+  foeCap() { const f = this.foe; return Math.min(20, 6 + f.hall.level * 2 + (f.dwell.level >= 1 ? f.dwell.level : 0) + Math.floor(this.dayNum / 3)); },
+  // на рассвете к врагу приходят новобранцы, а казна чинит стены
+  foeDawn() {
+    const f = this.foe; if (!f || !f.alive) return;
+    const n = Math.min(this.foeCap() - this.foeUnits().length, 1 + Math.floor(this.dayNum / 5));
+    for (let i = 0; i < n; i++) this.spawnFoeUnit(pick(['melee', 'melee', 'ranged']), f.dwell.level ? f.dwell.x : ENEMY_X);
+    for (const b of f.spots) if (b.level) { b.hp = b.maxHp; this.drawFoeBar(b); }
+  },
+  foePost(e) {
+    const f = this.foe, wl = e.side < 0 ? f.wallL : f.wallR;
+    const [o0, o1] = e.U.shot ? [120, 230] : [40, 110];
+    return wl.x - e.side * (o0 + (o1 - o0) * e.post);
+  },
+  // идущие в набег не ввязываются в драки с чудовищами по дороге, логова их не трогают
+  nearestOpp(e, range) {
+    let best = null, bd = range;
+    for (const u of this.units) { const d = Math.abs(u.spr.x - e.spr.x); if (d < bd) { bd = d; best = u; } }
+    if (e.state === 'raid') return best;
+    const other = e.fac === 'foe' ? 'beast' : 'foe', calm = e.state === 'idle';
+    for (const o of this.enemies) { if (o.dead || o.fac !== other || o === e || (calm && o.state === 'raid')) continue; const d = Math.abs(o.spr.x - e.spr.x); if (d < bd) { bd = d; best = o; } }
+    return best;
+  },
+  foeAttack(e, opp) {
+    const dmg = e.U.dmg * this.foe.dmgMul, f = this.foe;
+    if (!e.U.shot) { this.meleeFx(e.spr, opp.spr.x, e.kind === 'beast' ? 'heavy' : 'slash'); this.hurt(opp, dmg); return; }
+    if (e.kind === 'mage') e.cast = 0.35;
+    const key = e.kind === 'mage' ? `orb_${f.race}_foe` : f.race === 'goblin' ? 'pebble' : f.race === 'orc' ? 'javelin' : 'arrow';
+    const a = this.add.image(e.spr.x, GROUND - 46, key).setScale(S).setDepth(9).setFlipX(opp.spr.x < e.spr.x), tx = opp.spr.x;
+    music.sfx(e.kind === 'mage' ? 'magic' : 'shoot');
+    this.tweens.add({ targets: a, x: tx, y: GROUND - 30, duration: Math.abs(tx - e.spr.x) * 1.5 + 100, ease: 'Sine.in', onComplete: () => {
+      a.destroy();
+      if (e.kind === 'mage') { for (const u of [...this.units]) if (Math.abs(u.spr.x - tx) < 46) this.damageUnit(u, dmg); }
+      else if (opp.spr && opp.spr.active) this.hurt(opp, dmg);
+    } });
+  },
+  moveE(e, dx) { if (!dx) return; e.spr.x += dx; e.spr.setFlipX(dx < 0); },
+  updateFoeUnit(e, dt) {
+    const U = e.U, c = this.center;
+    const opp = this.nearestOpp(e, Math.max(e.state === 'raid' ? 280 : 340, U.range));
+    const nearHome = Math.abs(e.spr.x - ENEMY_X) < 1350;
+    if (opp && (e.state === 'raid' || nearHome)) {
+      const dx = opp.spr.x - e.spr.x; e.spr.setFlipX(dx < 0);
+      if (Math.abs(dx) < U.range) { if (e.atk <= 0) { e.atk = U.cd; this.foeAttack(e, opp); } }
+      else this.moveE(e, Math.sign(dx) * U.speed * dt);
+      return;
+    }
+    if (e.state === 'raid') {
+      if (Math.abs(this.player.x - e.spr.x) < 26 && e.atk <= 0) { e.atk = 1.2; this.meleeFx(e.spr, this.player.x); this.hitPlayer(e); return; }
+      let dir = Math.sign(c - e.spr.x) || 1;
+      if (Math.abs(e.spr.x - c) < 120) dir = Math.sign(this.player.x - e.spr.x) || 1;
+      const bl = this.blockingBuilding(e.spr.x, dir);
+      if (bl) { if (e.atk <= 0) { e.atk = U.cd + 0.3; if (U.shot) this.foeAttack(e, { spr: { x: bl.x, active: false } }); else this.meleeFx(e.spr, bl.x); this.damageBuilding(bl, e.F.bld); } return; }
+      this.moveE(e, dir * (Math.abs(e.spr.x - c) > 1400 ? 210 : U.speed * 0.8) * dt);
+      return;
+    }
+    // охрана своих стен; уносимые монеты достаются казне врага
+    const post = this.foePost(e), dx = post - e.spr.x;
+    if (Math.abs(dx) > 6) this.moveE(e, Math.sign(dx) * (Math.abs(dx) > 700 ? 200 : U.speed * 0.7) * dt);
+    else {
+      e.spr.setFlipX(e.side < 0);
+      if (e.state !== 'guard') { if (e.loot) { this.foe.gold += e.loot; e.loot = 0; e.lootImgs.forEach(i => i.destroy()); e.lootImgs = []; } e.state = 'guard'; }
+    }
+  },
+
+  // ---------- хозяйство врага: доход, стройка, найм, набеги ----------
+  updateFoe(dt) {
+    const f = this.foe; if (!f || !f.alive) return;
+    f.fire.setTexture('fire_' + this.fireF); f.glow.setAlpha((0.2 + this.nightN * 0.8) * 0.8);
+    f.gold = Math.min(60, f.gold + dt * (0.08 + 0.05 * f.hall.level) * (this.season === 3 ? 0.6 : 1));
+    if (!this.isNight) for (const b of f.spots) if (b.level && b.hp < b.maxHp) { b.hp = Math.min(b.maxHp, b.hp + dt * 0.5); this.drawFoeBar(b); }
+    if (f.raidAt != null && !this.isNight && this.dayNum === f.raidDay && (this.dayT > f.raidAt || this.dayT < 0.29)) { f.raidAt = null; this.foeRaid(); }
+    f.think -= dt; if (f.think > 0 || f.busy) return; f.think = 3;
+    const day = this.dayNum, hl = f.hall.level;
+    const plan = [
+      [f.wallL.level === 0, f.wallL, 1, 2], [f.wallR.level === 0, f.wallR, 1, 2],
+      [f.dwell.level === 0, f.dwell, 1, 4], [f.towerL.level === 0, f.towerL, 1, 5], [f.towerR.level === 0, f.towerR, 1, 5],
+      [hl === 1 && day >= 5, f.hall, 2, 8], [hl === 2 && day >= 13, f.hall, 3, 14],
+      [hl >= 2 && f.wallL.level === 1, f.wallL, 2, 4], [hl >= 2 && f.wallR.level === 1, f.wallR, 2, 4],
+      [f.dwell.level >= 1 && f.dwell.level < hl, f.dwell, f.dwell.level + 1, f.dwell.level === 1 ? 7 : 12],
+      [hl >= 2 && f.towerL.level === 1, f.towerL, 2, 8], [hl >= 2 && f.towerR.level === 1, f.towerR, 2, 8],
+      [day >= 9 && f.dmgMul < 1.25, 'forge', 1.25, 10], [day >= 18 && f.dmgMul < 1.5, 'forge', 1.5, 16],
+    ];
+    for (const [ok, b, lvl, cost] of plan) {
+      if (!ok) continue;
+      if (f.gold < cost) return;
+      f.gold -= cost;
+      if (b === 'forge') { f.dmgMul = lvl; return; }
+      f.busy = true;
+      const sc = this.add.image(b.x, GROUND + 1, 'scaffold').setOrigin(0.5, 1).setScale(S).setDepth(5);
+      this.time.delayedCall(16000, () => { sc.destroy(); f.busy = false; if (!f.alive) return; this.foeSetLevel(b, lvl); this.puff(b.x, 0xcbb894);
+        if (b.type === 'hall' && Math.abs(this.player.x - ENEMY_X) < 4000) this.toast(`Враг улучшил замок до уровня ${lvl}`); });
+      return;
+    }
+    // найм
+    const units = this.foeUnits(), cap = this.foeCap();
+    if (units.length >= cap || f.dwell.level === 0) return;
+    const kinds = ['melee', 'melee', 'ranged'].concat(f.dwell.level >= 2 ? ['ranged'] : [], f.dwell.level >= 3 ? ['beast'] : [], hl >= 2 ? ['mage'] : []);
+    const kind = pick(kinds), cost = UNITS[kind].cost;
+    if (f.gold >= cost) { f.gold -= cost; this.spawnFoeUnit(kind, f.dwell.x); }
+  },
+  // в сумерках решаем, будет ли завтра набег; войско выходит днём и к ночи доходит до нас
+  planFoeRaid() {
+    const f = this.foe, nn = this.nightCount + 1;
+    if (!f || !f.alive || nn < 4 || nn - f.lastRaid < f.raidGap) return;
+    f.raidAt = 0.82 + Math.random() * 0.06; f.raidDay = nn + 1;
+  },
+  foeRaid() {
+    const f = this.foe, nn = this.dayNum;
+    f.raids = (f.raids || 0) + 1;
+    const size = Math.min(18, 1 + f.raids * 2 + Math.floor(nn / 5));
+    const guards = this.foeUnits().filter(e => e.state === 'guard').sort(() => Math.random() - 0.5);
+    const take = Math.min(Math.floor(guards.length * 0.5), Math.ceil(size / 2));
+    guards.slice(0, take).forEach(e => e.state = 'raid');
+    const extra = size - take; f.gold = Math.max(0, f.gold - extra * 2);
+    for (let i = 0; i < extra; i++) { this.spawnFoeUnit(pick(['melee', 'melee', 'ranged', nn > 8 ? 'beast' : 'melee', nn > 12 ? 'mage' : 'ranged']), ENEMY_X - 300 - i * 30); this.enemies[this.enemies.length - 1].state = 'raid'; }
+    f.lastRaid = nn; f.raidGap = 2 + Math.floor(Math.random() * 2);
+    music.sfx('warhorn');
+    this.toast(`Набег! ${this.foeName()} выступили против тебя: ${size} воинов\nСледи за мини-картой и готовь стены`);
+  },
+  endFoeRaid() { for (const e of this.enemies) if (e.fac === 'foe' && (e.state === 'raid')) e.state = 'return'; },
+
+  // ---------- штурм вражеского замка ----------
+  foeGateInfo() {
+    const f = this.foe;
+    if (!f.alive) return { mode: 'none' };
+    const head = `${this.foeName()}: вражеский замок, уровень ${f.hall.level}`;
+    if (this.isNight || this.waveSent) return { mode: 'info', label: `${head}\nНочью на штурм не пойти` };
+    if (this.units.some(u => u.mode === 'assault' && u.den === this.foeTarget)) return { mode: 'info', label: `${head}\nШтурм идёт` };
+    if (!this.units.length) return { mode: 'info', label: `${head}\nДля штурма нужны воины` };
+    return { mode: 'pay', label: `${head}\nОтправить воинов на штурм`, cost: 4 };
+  },
+  completeFoeAssault() { this.units.forEach(u => { u.mode = 'assault'; u.den = this.foeTarget; }); music.sfx('warhorn'); this.toast(`Воины идут на штурм: ${this.foeName()}\nПоход долгий: воины не повернут назад до победы, гибели или зова рога`); },
+  // шаг юнита при штурме замка; true — обработан
+  assaultFoe(u, dt) {
+    const U = u.U, dir = Math.sign(ENEMY_X - u.spr.x) || 1, b = this.nextFoeBuilding(u.spr.x, dir);
+    if (!b) return false;
+    const dx = b.x - u.spr.x, reach = U.shot ? U.range * 0.75 : b.half + 8;
+    if (Math.abs(dx) < reach) {
+      u.spr.setFlipX(dx < 0);
+      if (u.atk <= 0) { u.atk = U.cd; if (U.shot) this.shoot(u, b.x, null, b); else { this.meleeFx(u.spr, b.x, u.kind === 'beast' || u.kind === 'tbrute' || u.kind === 'tfiend' ? 'heavy' : 'slash'); this.damageFoeBuilding(b, U.dmg * this.dmgMul()); } }
+      this.animUnit(u, 0);
+    } else this.animUnit(u, Math.sign(dx) * (Math.abs(dx) > 1400 ? (u.kind === 'siege' ? 110 : 200) : Math.abs(dx) > 600 ? (u.kind === 'siege' ? 80 : 120) : U.speed) * dt);
+    return true;
+  },
+  updateFoeTowers(dt) {
+    const f = this.foe; if (!f || !f.alive) return;
+    for (const b of f.spots) {
+      if (b.type !== 'tower' || !b.level) continue;
+      b.cd = (b.cd || 0) - dt; if (b.cd > 0) continue;
+      const opp = this.nearestOpp({ spr: { x: b.x }, fac: 'foe' }, 300); if (!opp) continue;
+      b.cd = b.level === 2 ? 1.1 : 1.6;
+      const a = this.add.image(b.x, GROUND - b.h + 30, 'arrow').setScale(S).setDepth(9).setFlipX(opp.spr.x < b.x), dmg = b.level === 2 ? 2.2 : 1.5;
+      this.tweens.add({ targets: a, x: opp.spr.x, y: GROUND - 30, duration: Math.abs(opp.spr.x - b.x) * 1.5 + 160, ease: 'Sine.in', onComplete: () => { a.destroy(); if (opp.spr && opp.spr.active) this.hurt(opp, dmg); } });
+    }
+  },
+  // куда идут чудовища из логова: к ближнему королевству; сильное логово в центре делит волну
+  denTarget(d, i) {
+    if (!this.foe || !this.foe.alive) return this.center;
+    const mid = (PLAYER_X + ENEMY_X) / 2;
+    if (Math.abs(d.x - mid) < 50) return i % 2 ? ENEMY_X : this.center;
+    return d.x < mid ? this.center : ENEMY_X;
+  },
+});
 
 // ================== ЗАПУСК ==================
 const config = {
