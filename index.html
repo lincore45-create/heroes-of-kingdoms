@@ -31,7 +31,7 @@
 <div id="game"></div>
 <script>
 // ================== НАСТРОЙКИ ==================
-const W = 1440, H = 810;         // внутреннее разрешение мира: пиксель-арт на 25% мельче прежнего
+const W = 1440, H = 810;         // внутреннее разрешение мира (модели крупнее и чётче, чем при 1728×972)
 const GROUND = 570;              // линия земли, на ней всё стоит
 const BANK = 599;                // где берег переходит в воду
 // Интерфейс и меню рисуются в прежних координатах 1152×648 и увеличиваются в UI раз
@@ -172,8 +172,76 @@ function mkPainter(ctx, w, h) {
   return P;
 }
 
+// ---------- модели в повышенной чёткости ----------
+// Персонажи и существа рисуются на сетке в HIRES раз мельче: исходный рисунок увеличивается
+// по-пиксельному (Scale2x трижды, затем выборка — контуры остаются ступенчатыми, но гладкими),
+// после чего добавляются тёмная обводка по краю и блик сверху.
+const HIRES = 1.25;
+const HIRES_RE = /^(mon|mel|rng|bst|mag|bld|vagrant|vil|tax|cat|cart|imp|brute|fiend|aimp|abrute|afiend|wgob|hob|warg|gnome|dwarf|golem|unq|drg|santa)_/;
+function scale2x(src, w, h) {
+  const out = new Uint32Array(w * h * 4), W2 = w * 2, at = (x, y) => (x < 0 || y < 0 || x >= w || y >= h) ? 0 : src[y * w + x];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const P = src[y * w + x], A = at(x, y - 1), B = at(x + 1, y), C = at(x - 1, y), D = at(x, y + 1);
+    let e0 = P, e1 = P, e2 = P, e3 = P;
+    if (A !== D && C !== B) { if (C === A) e0 = A; if (A === B) e1 = B; if (C === D) e2 = C; if (B === D) e3 = D; }
+    const o = (y * 2) * W2 + x * 2; out[o] = e0; out[o + 1] = e1; out[o + W2] = e2; out[o + W2 + 1] = e3;
+  }
+  return out;
+}
+function hiResCanvas(src, k) {
+  const w = src.width, h = src.height, data = new Uint32Array(src.getContext('2d').getImageData(0, 0, w, h).data.buffer.slice(0));
+  let big = data, bw = w, bh = h;
+  for (let i = 0; i < 3; i++) { big = scale2x(big, bw, bh); bw *= 2; bh *= 2; }
+  const W2 = Math.round(w * k), H2 = Math.round(h * k), out = new Uint32Array(W2 * H2);
+  for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
+    const sx = Math.min(bw - 1, Math.floor((x + 0.5) / W2 * bw)), sy = Math.min(bh - 1, Math.floor((y + 0.5) / H2 * bh));
+    out[y * W2 + x] = big[sy * bw + sx];
+  }
+  // объём: в каждом столбце одноцветные отрезки светлеют сверху и темнеют книзу
+  const shade0 = (v, f) => { const r = v & 255, g = (v >> 8) & 255, bb = (v >> 16) & 255, a = v >>> 24;
+    const m = c => Math.max(0, Math.min(255, Math.round(f < 0 ? c * (1 + f) : c + (255 - c) * f)));
+    return ((a << 24) | (m(bb) << 16) | (m(g) << 8) | m(r)) >>> 0; };
+  const vol = new Uint32Array(out);
+  for (let x = 0; x < W2; x++) {
+    let y = 0;
+    while (y < H2) {
+      const v = out[y * W2 + x]; let e = y + 1;
+      while (e < H2 && out[e * W2 + x] === v) e++;
+      const L = e - y;
+      if ((v >>> 24) && L >= 3) for (let i = 0; i < L; i++) { const t = i / (L - 1); vol[(y + i) * W2 + x] = shade0(v, t < 0.25 ? 0.04 : t > 0.7 ? -0.08 * (t - 0.7) / 0.3 : 0); }
+      y = e;
+    }
+  }
+  out.set(vol);
+  // обводка и блик
+  const op = (x, y) => x >= 0 && y >= 0 && x < W2 && y < H2 && (out[y * W2 + x] >>> 24) > 0;
+  const res = new Uint32Array(out);
+  const shade = (v, f) => { const r = v & 255, g = (v >> 8) & 255, b = (v >> 16) & 255, a = v >>> 24;
+    const m = c => Math.max(0, Math.min(255, Math.round(f < 0 ? c * (1 + f) : c + (255 - c) * f)));
+    return ((a << 24) | (m(b) << 16) | (m(g) << 8) | m(r)) >>> 0; };
+  for (let y = 0; y < H2; y++) for (let x = 0; x < W2; x++) {
+    if (!op(x, y)) continue;
+    const v = out[y * W2 + x];
+    if (!op(x, y - 1)) res[y * W2 + x] = shade(v, 0.16);
+    else if (!op(x - 1, y) || !op(x + 1, y) || !op(x, y + 1)) res[y * W2 + x] = shade(v, -0.26);
+    else if (op(x, y - 2) === false) res[y * W2 + x] = shade(v, 0.06);
+  }
+  const c = document.createElement('canvas'); c.width = W2; c.height = H2;
+  const ctx = c.getContext('2d'), img = ctx.createImageData(W2, H2);
+  new Uint32Array(img.data.buffer).set(res); ctx.putImageData(img, 0, 0);
+  return c;
+}
 function paintTex(scene, key, w, h, fn) {
   if (scene.textures.exists(key)) return;
+  const pre = key.split('_')[0], hd = typeof HD_SIZE !== 'undefined' && (HD_SIZE[pre] || HD_SIZE[pre.slice(1)]);
+  if (hd && (HD_SIZE[pre] || pre[0] === 'a')) { w = hd[0]; h = hd[1]; }
+  else if (HIRES > 1 && HIRES_RE.test(key) && typeof document !== 'undefined') {
+    const src = document.createElement('canvas'); src.width = w; src.height = h;
+    const sctx = src.getContext('2d'); fn(mkPainter(sctx, w, h), sctx);
+    const out = hiResCanvas(src, HIRES), t = scene.textures.createCanvas(key, out.width, out.height);
+    t.getContext().drawImage(out, 0, 0); t.refresh();
+    return;
+  }
   const t = scene.textures.createCanvas(key, w, h), ctx = t.getContext();
   fn(mkPainter(ctx, w, h), ctx);
   t.refresh();
@@ -983,6 +1051,300 @@ function buildNewTextures(scene) {
     silhouette(scene, `drg_A_${k}`, `drg_X_${k}`, '#e03a3a');
     paintTex(scene, 'uniqhome_' + k, 48, 34, P => paintUniqHome(P, 48, 34, p, st));
   }
+}
+
+// ================== ПИКСЕЛЬ-АРТ: ОСНОВНЫЕ МОДЕЛИ В ПОВЫШЕННОЙ ЧЁТКОСТИ ==================
+// Перерисованы вручную на сетке в 1,25 раза мельче прежней (больше пикселей на модель).
+// Эти функции заменяют прежние одноимённые; размеры текстур — в HD_SIZE.
+const HD_SIZE = { mon: [38, 35], mel: [20, 25], rng: [20, 25], mag: [20, 28], bld: [20, 25], imp: [15, 20], brute: [24, 26], fiend: [28, 33], aimp: [15, 20], abrute: [24, 26], afiend: [28, 33] };
+
+// ---------- монарх на коне (38×35) ----------
+function drawMonarch(P, p, st, f) {
+  const N = '#7a4f30', n = '#5a3820', m = '#97653f', mh = '#a8784e', M = '#2b1d14', M2 = '#45301f', hoof = '#1e1712';
+  // хвост
+  P.line(9, 18, 6, 20, M, 2); P.line(6, 20, 3, 26, M, 2); P.line(4, 25, 2, 29, M); P.px(5, 22, M2); P.px(4, 24, M2); P.px(1, 29, M);
+  // ноги: дальние темнее; два кадра шага
+  const L = f === 0
+    ? [[9, 25, 9, 31, n], [24, 25, 24, 31, n], [12, 25, 12, 31, N], [27, 25, 27, 31, N]]
+    : [[10, 25, 13, 31, n], [24, 25, 20, 31, n], [12, 25, 7, 30, N], [27, 25, 31, 30, N]];
+  for (const [x0, y0, x1, y1, c] of L) { P.line(x0, y0, x1, y1, c, 2); P.rect(x1, y1 + 2, 3, 1, hoof); P.px(x1, y1 + 1, mix(c, '#000000', 0.2)); }
+  // туловище, круп, грудь
+  P.ell(18.5, 20.5, 12, 5.4, sh3(mh, N, n, -0.45, 0.5));
+  P.ell(10.5, 20, 5.6, 5.6, sh3(m, N, n));
+  P.ell(26, 19.5, 4.8, 5.8, sh3(m, N, n));
+  P.line(12, 24, 24, 24, n); P.px(30, 21, n);
+  // шея и голова
+  P.poly([[23, 20], [25.5, 12], [28, 7], [32, 6], [32.5, 11], [31, 20]], N);
+  P.line(30, 11, 29, 18, m); P.line(31, 13, 30, 17, mh);
+  P.poly([[28.5, 6], [31.5, 3], [34, 4.5], [37.5, 10], [37.5, 13], [34, 13.5], [30, 11]], N);
+  P.rect(34, 10, 4, 4, n); P.px(36, 11, hoof); P.px(37, 12, M2); P.px(31, 6, INK); P.px(32, 5, mh); P.px(33, 7, m);
+  P.px(30, 1, n); P.px(31, 1, N); P.px(30, 2, N); P.px(31, 2, N); P.px(32, 2, n);
+  // уздечка
+  P.line(30, 8, 34, 11, '#3b2a20'); P.px(34, 10, p.K);
+  // грива
+  P.line(24, 18, 28, 7, M, 2); P.line(28, 6, 30, 4, M); P.px(23, 19, M); P.px(26, 11, M2); P.px(25, 15, M2); P.px(27, 9, M2);
+  // попона в цвет народа с бахромой
+  P.rect(11, 16, 13, 7, p.C); P.rect(11, 16, 13, 1, p.Y); P.rect(11, 22, 13, 1, p.c);
+  for (let x = 11; x < 24; x += 2) { P.px(x, 23, p.K); P.px(x + 1, 23, p.k); }
+  P.rect(16, 18, 3, 3, p.K); P.px(17, 19, p.C);
+  // всадник: плащ
+  P.poly([[13, 9], [16, 9], [15.5, 16], [11, 19], [6.5, 18], [9.5, 14]], p.c);
+  P.line(11, 12, 8, 17, p.C); P.line(13, 13, 11, 18, p.C);
+  // нога в стремени
+  P.rect(16, 15, 4, 5, p.c); P.rect(16, 15, 1, 5, mix(p.c, '#000000', 0.2)); P.rect(16, 20, 5, 2, p.B); P.px(20, 21, p.K);
+  // туловище с горностаевым воротником
+  P.rect(14, 9, 7, 6, p.C); P.rect(14, 9, 1, 6, p.c); P.rect(20, 10, 1, 5, p.Y);
+  P.rect(14, 14, 7, 1, p.B); P.px(17, 14, p.K);
+  P.rect(13, 8, 9, 2, BONE); P.px(15, 8, INK); P.px(19, 8, INK); P.px(17, 9, INK);
+  P.px(17, 11, p.K); P.px(17, 12, p.k);
+  // рука и поводья
+  P.rect(20, 10, 4, 2, p.C); P.rect(20, 11, 4, 1, p.c); P.rect(24, 11, 2, 2, p.S);
+  P.line(26, 12, 33, 11, '#3b2a20');
+  // голова
+  P.rect(15, 2, 5, 6, p.S); P.rect(15, 7, 5, 1, p.s); P.px(20, 4, p.s); P.px(20, 5, p.S); P.px(18, 4, p.E); P.px(19, 6, p.s);
+  P.rect(14, 2, 2, 5, p.H); P.px(15, 7, p.H);
+  if (st === 'tent') { P.px(19, 7, p.W); P.px(17, 7, p.W); P.rect(15, 6, 6, 1, p.S); P.px(16, 5, p.s); }
+  if (st === 'mound') { P.rect(11, 3, 4, 1, p.S); P.px(10, 2, p.S); P.px(12, 4, p.s); P.px(21, 4, p.s); P.px(18, 4, p.K); }
+  if (st === 'house') { P.rect(15, 7, 5, 1, p.H); P.px(19, 6, p.H); P.px(16, 6, p.H); }
+  // корона с камнями
+  P.rect(14, 1, 7, 1, p.K); P.px(14, 0, p.K); P.px(16, 0, p.K); P.px(18, 0, p.K); P.px(20, 0, p.K);
+  P.px(16, 1, '#d0463a'); P.px(18, 1, '#3a8ad0'); P.px(20, 1, p.k);
+}
+
+// ---------- воин ближнего боя (20×25) ----------
+function drawMelee(P, p, st, f) {
+  if (st === 'house') {
+    legs(P, 7, 11, 19, 5, f, p.A, p.a, p.B);
+    // кольчужные плечи и сюрко с крестом
+    P.rect(6, 10, 8, 2, p.A); P.rect(6, 10, 8, 1, p.Q); P.px(13, 11, p.a);
+    P.rect(6, 11, 8, 8, p.C); P.rect(6, 11, 1, 8, p.c); P.rect(13, 12, 1, 7, p.c);
+    P.rect(9, 12, 2, 5, p.K); P.rect(8, 13, 4, 1, p.K); P.px(9, 12, p.Y);
+    P.rect(6, 16, 8, 1, p.B); P.px(10, 16, p.k);
+    P.rect(6, 17, 8, 2, p.c); for (let x = 6; x < 14; x += 2) P.px(x, 18, p.C);
+    // рука и меч
+    P.rect(13, 11, 2, 3, p.A); P.px(14, 11, p.Q); P.rect(14, 13, 2, 1, p.S);
+    P.rect(15, 2, 1, 11, p.W); P.rect(16, 3, 1, 10, p.Q); P.px(15, 1, p.W); P.px(16, 12, p.a);
+    P.rect(13, 13, 5, 1, p.K); P.px(13, 13, p.k); P.rect(15, 14, 1, 2, p.D); P.px(15, 16, p.K);
+    // щит-капля с окантовкой
+    P.poly([[1, 10], [7, 10], [7, 16], [4, 20], [1, 16]], p.C);
+    P.rect(1, 10, 6, 1, p.K); P.rect(1, 10, 1, 6, p.K); P.line(1, 16, 4, 19, p.K); P.line(6, 16, 4, 19, p.c);
+    P.rect(3, 12, 2, 4, p.K); P.rect(2, 13, 4, 1, p.K); P.px(6, 11, p.Y);
+    // шлем с забралом и плюмажем
+    P.rect(6, 2, 8, 8, p.A); P.rect(7, 1, 6, 1, p.A); P.rect(7, 2, 3, 1, p.Q); P.px(6, 3, p.Q); P.rect(13, 3, 1, 6, p.a);
+    P.rect(7, 5, 7, 1, INK); P.px(12, 5, p.E); P.px(10, 5, '#3a3a3a');
+    P.rect(9, 6, 1, 3, p.a); P.px(11, 8, INK); P.px(12, 8, INK); P.px(12, 7, INK);
+    P.rect(6, 9, 8, 1, p.a); P.px(7, 9, p.Q);
+    P.rect(8, 0, 3, 1, p.R); P.px(7, 0, p.r); P.px(11, 1, p.R);
+  } else if (st === 'tent') {
+    legs(P, 5, 11, 19, 5, f, p.c, mix(p.c, '#000000', 0.3), p.B, 3);
+    // торс с перевязью
+    P.rect(4, 10, 12, 7, p.S); P.rect(4, 10, 1, 7, p.s); P.px(9, 12, p.s); P.px(11, 12, p.s); P.px(8, 14, p.s); P.px(10, 14, p.s);
+    P.line(5, 10, 13, 16, p.D); P.line(6, 10, 14, 16, p.B);
+    // наплечники с шипами
+    P.rect(2, 9, 4, 4, p.A); P.rect(14, 9, 4, 4, p.A); P.rect(3, 9, 2, 1, p.Q); P.rect(15, 9, 2, 1, p.Q);
+    P.px(2, 8, p.W); P.px(3, 7, p.W); P.px(17, 8, p.W); P.px(16, 7, p.W); P.px(2, 12, p.a); P.px(17, 12, p.a);
+    // пояс и набедренник
+    P.rect(4, 16, 12, 1, p.B); P.rect(9, 16, 2, 1, p.K);
+    P.rect(6, 17, 8, 3, p.C); P.rect(7, 20, 6, 1, p.c); P.px(6, 19, p.c); P.px(13, 19, p.c); P.px(9, 18, p.c);
+    // голова с клыками
+    P.rect(6, 3, 8, 7, p.S); P.rect(6, 6, 9, 4, p.S); P.rect(7, 4, 6, 1, p.s);
+    P.px(9, 5, p.E); P.px(12, 5, p.E); P.rect(10, 8, 3, 1, p.s); P.px(10, 9, p.W); P.px(13, 9, p.W); P.px(13, 8, p.W); P.px(14, 7, p.s);
+    // рогатый шлем
+    P.rect(6, 1, 8, 3, p.A); P.rect(7, 1, 4, 1, p.Q); P.rect(6, 3, 8, 1, p.a);
+    P.px(5, 2, p.W); P.px(4, 1, p.W); P.px(4, 0, p.W); P.px(14, 2, p.W); P.px(15, 1, p.W); P.px(15, 0, p.W);
+    // топор
+    P.rect(15, 12, 2, 2, p.S);
+    P.rect(16, 2, 1, 19, p.D); P.px(16, 9, p.l);
+    P.rect(17, 2, 3, 6, p.W); P.rect(17, 2, 1, 6, p.Q); P.rect(19, 3, 1, 4, '#ffffff'); P.px(19, 8, p.a); P.px(19, 1, p.W);
+  } else {
+    legs(P, 7, 11, 19, 5, f, p.a, mix(p.a, '#000000', 0.25), p.B, 1);
+    // куртка с заплатой и рваным подолом
+    P.rect(6, 11, 8, 8, p.A); P.rect(6, 11, 1, 8, p.a); P.rect(6, 15, 8, 1, p.B); P.px(9, 15, p.K);
+    for (let x = 5; x < 14; x++) P.px(x, 19 - (x % 2), p.a);
+    P.rect(11, 12, 2, 2, p.C); P.px(11, 12, p.c); P.px(7, 13, p.a);
+    // руки
+    P.rect(5, 12, 1, 4, p.S); P.px(5, 16, p.s); P.rect(13, 12, 3, 1, p.S);
+    // голова с большими ушами
+    P.rect(6, 5, 8, 6, p.S); P.rect(6, 10, 8, 1, p.s);
+    P.rect(2, 6, 4, 1, p.S); P.rect(3, 7, 3, 1, p.s); P.px(1, 5, p.S); P.px(2, 5, p.S);
+    P.rect(14, 6, 4, 1, p.S); P.px(18, 5, p.S); P.px(17, 5, p.S); P.rect(14, 7, 2, 1, p.s);
+    P.px(9, 7, p.K); P.px(12, 7, p.K); P.px(9, 6, p.s); P.px(12, 6, p.s); P.px(14, 8, p.s); P.px(13, 8, p.S);
+    P.rect(9, 10, 4, 1, p.E); P.px(10, 10, BONE); P.px(12, 10, BONE);
+    // колпак
+    P.rect(6, 3, 8, 3, p.C); P.rect(6, 5, 8, 1, p.c); P.rect(6, 2, 3, 1, p.C); P.px(5, 2, p.C); P.px(4, 1, p.c); P.px(3, 0, p.Y);
+    // копьё
+    P.rect(16, 1, 1, 24, p.D); P.px(16, 0, p.W); P.rect(15, 1, 3, 2, p.W); P.px(16, 3, p.W); P.px(17, 2, p.Q);
+    P.rect(15, 5, 3, 1, p.C); P.px(15, 6, p.c);
+  }
+}
+
+// ---------- стрелок (20×25) ----------
+function drawRanged(P, p, st, f) {
+  if (st === 'house') {
+    legs(P, 7, 11, 19, 5, f, p.c, mix(p.c, '#000000', 0.3), p.B);
+    // колчан
+    P.rect(3, 9, 3, 9, p.D); P.rect(3, 9, 3, 1, p.l); P.px(4, 13, p.l);
+    P.px(3, 8, p.W); P.px(4, 7, p.R); P.px(5, 8, p.W); P.px(4, 6, p.R); P.px(5, 7, p.R);
+    // туника
+    P.rect(6, 10, 8, 9, p.C); P.rect(6, 10, 1, 9, p.c); P.rect(6, 15, 8, 1, p.B); P.px(10, 15, p.K);
+    P.rect(6, 18, 8, 1, p.c); P.rect(9, 10, 2, 1, p.Y); P.px(13, 11, p.Y);
+    // капюшон и лицо
+    P.rect(6, 2, 8, 8, p.c); P.rect(7, 2, 4, 1, p.C); P.px(5, 4, p.c); P.px(5, 5, p.c); P.px(4, 6, p.c); P.px(4, 7, p.c);
+    P.rect(9, 5, 5, 4, p.S); P.px(12, 6, p.E); P.rect(9, 8, 5, 1, p.s); P.px(13, 7, p.s); P.rect(8, 4, 1, 5, p.c); P.px(9, 5, p.s);
+    // лук и рука
+    for (const [x, y] of [[15, 2], [16, 3], [17, 4], [18, 5], [18, 6], [18, 7], [18, 8], [18, 9], [18, 10], [18, 11], [18, 12], [18, 13], [17, 14], [16, 15], [15, 16]]) P.px(x, y, p.D);
+    P.px(17, 5, p.l); P.px(17, 13, p.l); P.rect(15, 3, 1, 13, BONE);
+    P.rect(12, 10, 6, 2, p.c); P.rect(12, 10, 6, 1, p.C); P.rect(18, 9, 1, 3, p.S); P.px(19, 10, p.K);
+  } else if (st === 'tent') {
+    legs(P, 7, 11, 19, 5, f, p.c, mix(p.c, '#000000', 0.3), p.B);
+    // дротики за спиной
+    P.line(3, 4, 5, 15, p.D); P.line(4, 3, 6, 14, p.D); P.px(3, 3, p.W); P.px(4, 2, p.W); P.px(3, 2, p.Q);
+    P.rect(5, 10, 10, 7, p.S); P.rect(5, 10, 1, 7, p.s); P.px(10, 12, p.s); P.px(9, 14, p.s);
+    P.line(5, 15, 14, 10, p.D); P.rect(5, 16, 10, 1, p.B); P.px(9, 16, p.K);
+    P.rect(6, 17, 8, 2, p.C); P.px(6, 18, p.c); P.px(13, 18, p.c);
+    // голова с повязкой
+    P.rect(6, 3, 8, 7, p.S); P.rect(6, 6, 9, 4, p.S); P.rect(7, 4, 6, 1, p.s);
+    P.px(9, 5, p.E); P.px(12, 5, p.E); P.px(10, 9, p.W); P.px(13, 9, p.W); P.rect(10, 8, 3, 1, p.s);
+    P.rect(6, 3, 8, 1, p.C); P.px(5, 4, p.C); P.px(4, 5, p.C); P.px(4, 6, p.c); P.rect(6, 2, 8, 1, p.H); P.px(7, 1, p.H);
+    // рука с дротиком над головой
+    P.rect(14, 6, 1, 5, p.S); P.rect(14, 10, 2, 1, p.S);
+    P.rect(15, 0, 1, 14, p.D); P.rect(15, 0, 1, 3, p.W); P.px(16, 1, p.Q); P.px(15, 7, p.l);
+  } else {
+    legs(P, 7, 11, 19, 5, f, p.a, mix(p.a, '#000000', 0.25), p.B, 1);
+    P.rect(6, 11, 8, 8, p.A); P.rect(6, 11, 1, 8, p.a); P.rect(6, 15, 8, 1, p.B);
+    for (let x = 5; x < 14; x++) P.px(x, 19 - (x % 2), p.a);
+    // сумка с камнями
+    P.rect(3, 14, 3, 4, p.D); P.px(3, 14, p.l); P.px(4, 13, STONE2);
+    P.rect(6, 5, 8, 6, p.S); P.rect(6, 10, 8, 1, p.s);
+    P.rect(2, 6, 4, 1, p.S); P.px(1, 5, p.S); P.rect(3, 7, 3, 1, p.s); P.rect(14, 6, 4, 1, p.S); P.px(18, 5, p.S); P.rect(14, 7, 2, 1, p.s);
+    P.px(9, 7, p.K); P.px(12, 7, p.K); P.px(14, 8, p.s); P.rect(9, 10, 4, 1, p.E); P.px(11, 10, BONE);
+    P.rect(6, 3, 8, 3, p.C); P.px(7, 2, p.C); P.px(10, 2, p.Y); P.rect(6, 5, 8, 1, p.c);
+    // праща над головой
+    P.line(13, 11, 15, 6, p.S); P.line(15, 6, 16, 3, p.D); P.line(16, 3, 19, 4, p.D);
+    P.rect(17, 0, 3, 3, STONE); P.px(17, 0, STONE2); P.px(19, 2, STONE3);
+  }
+}
+
+// ---------- маг (20×28), кадр C — заклинание ----------
+function drawMage(P, p, st, f) {
+  const cast = f === 2, hem = f === 1 ? 1 : 0, orb = p.G;
+  if (st === 'house') {
+    P.poly([[6, 10], [14, 10], [16, 27], [4 - hem, 27]], p.C);
+    P.rect(6, 10, 1, 17, p.c); P.rect(5 - hem, 26, 11 + hem, 1, p.c);
+    P.rect(6, 15, 8, 1, p.K); P.px(10, 18, p.K); P.px(8, 21, p.K); P.px(12, 23, p.K); P.px(9, 24, p.Y);
+    P.rect(5, 27, 4, 1, p.B); P.rect(11, 27, 4, 1, p.B);
+    // лицо и длинная борода
+    P.rect(8, 6, 5, 4, p.S); P.px(11, 7, p.E); P.px(12, 8, p.s);
+    P.rect(7, 9, 7, 4, BONE); P.rect(8, 13, 5, 1, BONE); P.rect(9, 14, 3, 1, BONE); P.px(10, 15, BONE); P.px(9, 11, '#c8bda6');
+    // остроконечная шляпа со звёздами
+    P.rect(5, 5, 10, 1, p.c); P.rect(6, 3, 8, 2, p.C); P.rect(7, 2, 5, 1, p.C); P.rect(7, 1, 3, 1, p.C); P.px(6, 0, p.C); P.px(5, 0, p.c);
+    P.px(10, 3, p.K); P.px(8, 4, p.K); P.px(12, 4, p.k);
+  } else if (st === 'tent') {
+    P.poly([[5, 10], [15, 10], [16, 24], [4 - hem, 24]], p.L);
+    P.rect(5, 10, 1, 14, p.l); for (let x = 4 - hem; x < 16; x += 2) P.px(x, 24, p.l);
+    P.rect(6, 12, 8, 9, p.S); P.line(6, 12, 13, 19, p.D); P.px(10, 15, p.W); P.px(9, 16, p.W); P.px(11, 14, p.W);
+    legs(P, 7, 11, 24, 3, f === 1 ? 1 : 0, p.c, p.c, p.B);
+    // маска-череп и перья
+    P.rect(6, 2, 8, 8, BONE); P.rect(7, 5, 2, 2, INK); P.rect(11, 5, 2, 2, INK); P.px(7, 5, orb); P.px(11, 5, orb);
+    P.rect(8, 9, 4, 1, '#9a8f7c'); P.px(9, 9, INK); P.px(11, 9, INK); P.px(10, 7, '#9a8f7c');
+    P.px(5, 1, p.R); P.px(6, 0, p.K); P.px(9, 0, p.R); P.px(11, 0, p.K); P.px(14, 1, p.R); P.rect(6, 1, 8, 1, p.C);
+  } else {
+    P.poly([[6, 10], [14, 10], [16, 27], [4 - hem, 27]], p.C);
+    P.rect(6, 10, 1, 17, p.c); for (let x = 5 - hem; x < 16; x++) P.px(x, 27 - (x % 2), p.c);
+    P.rect(6, 16, 8, 1, p.B); P.rect(7, 17, 3, 3, p.D); P.px(8, 18, p.l);
+    P.rect(6, 4, 8, 7, p.c); P.rect(7, 3, 6, 1, p.c); P.px(5, 2, p.c); P.px(4, 1, p.C); P.px(3, 0, p.C);
+    P.rect(9, 6, 5, 4, p.S); P.px(10, 7, orb); P.px(12, 7, orb); P.px(14, 8, p.s); P.px(11, 9, p.s);
+    P.rect(2, 6, 4, 1, p.S); P.px(1, 5, p.S);
+  }
+  // посох
+  const top = cast ? 0 : 4;
+  P.rect(16, top + 3, 1, 28 - top - 3, p.D);
+  if (st === 'tent') { P.rect(15, top, 3, 3, BONE); P.px(15, top + 1, INK); P.px(17, top + 1, INK); }
+  else if (st === 'mound') { P.px(17, top + 1, p.D); P.px(18, top, p.D); }
+  P.rect(cast ? 15 : 15, top, cast ? 4 : 3, cast ? 4 : 3, orb); P.px(15, top, '#ffffff');
+  if (cast) { P.px(16, top + 1, '#ffffff'); P.px(13, top + 2, orb); P.px(19, top + 1, orb); P.px(17, Math.max(0, top - 1), orb); }
+  P.rect(14, cast ? 9 : 14, 3, 1, p.S);
+}
+
+// ---------- рабочий (20×25) ----------
+function drawBuilder(P, p, st, fr) {
+  const hat = '#c9a85a', hat2 = '#a08440', hat3 = '#ddc078', shirt = '#c9b48a', shirtD = '#a8936a', trou = '#5e5040', apron = '#7a5a3a';
+  legs(P, 7, 11, 19, 5, fr === 'walk1' ? 1 : 0, trou, mix(trou, '#000000', 0.25), p.B);
+  P.rect(6, 11, 8, 8, shirt); P.rect(6, 11, 1, 8, shirtD); P.rect(9, 13, 5, 6, apron); P.rect(9, 13, 5, 1, '#8a6a46'); P.px(11, 16, '#5a4028');
+  P.rect(6, 14, 8, 1, p.B); P.px(12, 14, '#c9a26a');
+  P.rect(7, 5, 6, 6, p.S); P.rect(7, 10, 6, 1, p.s); P.px(11, 7, p.E); P.px(13, 8, p.s); P.px(12, 8, p.S); P.rect(6, 6, 1, 4, p.H);
+  P.rect(9, 9, 3, 1, p.s);
+  if (st === 'tent') { P.px(11, 10, p.W); P.px(9, 10, p.W); P.rect(7, 9, 7, 1, p.S); }
+  if (st === 'mound') { P.rect(3, 6, 4, 1, p.S); P.px(2, 5, p.S); P.px(13, 7, p.S); P.px(14, 7, p.s); }
+  // соломенная шляпа
+  P.rect(5, 4, 10, 1, hat); P.rect(6, 1, 8, 3, hat); P.rect(6, 3, 8, 1, hat2); P.px(14, 4, hat2); P.rect(7, 1, 3, 1, hat3); P.px(5, 4, hat2);
+  if (fr === 'walk0' || fr === 'walk1') {
+    P.rect(13, 12, 1, 4, shirt); P.px(13, 16, p.S);
+    P.rect(4, 15, 1, 5, p.D); P.rect(3, 14, 4, 2, STONE); P.px(3, 14, STONE2);
+  } else if (fr === 'work0') {
+    P.rect(13, 8, 1, 4, shirt); P.px(13, 7, p.S); P.rect(14, 2, 1, 6, p.D); P.rect(13, 1, 4, 2, STONE); P.px(13, 1, STONE2);
+  } else if (fr === 'work1') {
+    P.rect(13, 12, 3, 1, shirt); P.px(16, 12, p.S); P.rect(17, 12, 2, 1, p.D); P.rect(18, 10, 2, 4, STONE); P.px(19, 10, STONE2);
+  } else if (fr === 'fish') {
+    P.rect(13, 11, 3, 1, shirt); P.px(16, 11, p.S); P.line(16, 10, 19, 0, p.D);
+  }
+}
+
+// ---------- чудовища: бес (15×20), громила (24×26), демон (28×33) ----------
+function drawImp(P, f, Q = FOE_PAL, tame) {
+  const X = Q.X, x = Q.x, x2 = Q.x2, m = '#9a8f7c', E = Q.E;
+  // рваный балахон
+  P.poly([[2, 7], [12, 7], [15, 19], [0, 19]], X);
+  P.line(4, 9, 3, 17, x); P.line(10, 9, 11, 17, x); P.line(7, 10, 7, 16, x2); P.px(5, 12, x2);
+  for (let i = 0; i < 15; i += 2) P.px(i, 19, x);
+  // когтистые руки
+  P.rect(0, 10, 1, 4, X); P.px(0, 14, BONE); P.px(1, 14, BONE); P.rect(14, 10, 1, 4, X); P.px(14, 14, BONE); P.px(13, 14, BONE);
+  // капюшон и маска-череп
+  P.rect(3, 0, 9, 8, X); P.px(2, 1, X); P.px(12, 1, X); P.px(4, 0, x); P.px(10, 0, x);
+  P.rect(4, 1, 7, 6, BONE); P.px(7, 1, m); P.px(7, 2, m); P.px(8, 3, m); P.px(4, 6, '#c8bda6');
+  P.rect(5, 3, 2, 1, E); P.rect(9, 3, 2, 1, E); P.px(5, 4, '#7a1a1a'); P.px(10, 4, '#7a1a1a');
+  P.rect(5, 6, 5, 1, m); P.px(6, 6, INK); P.px(8, 6, INK);
+  if (f === 0) { P.px(5, 19, x2); P.px(9, 19, x2); } else { P.px(4, 19, x2); P.px(10, 19, x2); }
+  if (tame) { P.rect(3, 8, 9, 1, tame.K); P.px(7, 9, tame.K); }
+}
+function drawBrute(P, f, Q = FOE_PAL, tame) {
+  const X = Q.X, x = Q.x, x2 = Q.x2, m = '#9a8f7c', E = Q.E;
+  // рога
+  P.rect(1, 0, 4, 5, BONE); P.rect(19, 0, 4, 5, BONE); P.px(0, 0, BONE); P.px(23, 0, BONE); P.px(3, 5, m); P.px(20, 5, m); P.px(2, 2, '#c8bda6'); P.px(21, 2, '#c8bda6');
+  // туша
+  P.rect(4, 4, 16, 6, X); P.rect(1, 9, 22, 11, X); P.rect(0, 11, 24, 6, X);
+  P.rect(5, 10, 1, 9, x); P.rect(18, 10, 1, 9, x); P.rect(10, 12, 4, 5, x); P.px(11, 11, x2); P.px(12, 13, x2); P.px(7, 15, x2); P.px(16, 15, x2);
+  for (let i = 0; i < 12; i++) P.px(i * 2, 20, X);
+  // череп-маска
+  P.rect(5, 4, 14, 7, BONE); P.px(5, 10, m); P.px(18, 10, m); P.rect(11, 4, 2, 5, m);
+  P.rect(6, 6, 4, 1, E); P.rect(14, 6, 4, 1, E); P.px(7, 7, '#7a1a1a'); P.px(16, 7, '#7a1a1a');
+  P.rect(8, 9, 8, 1, m); P.px(9, 10, INK); P.px(11, 10, INK); P.px(13, 10, INK); P.px(14, 10, INK);
+  // кулаки с когтями
+  P.rect(0, 18, 2, 4, BONE); P.rect(22, 18, 2, 4, BONE); P.px(1, 21, m); P.px(22, 21, m);
+  if (f === 0) { P.rect(5, 21, 4, 5, x); P.rect(15, 21, 4, 5, x); P.rect(4, 25, 5, 1, X); P.rect(15, 25, 5, 1, X); }
+  else { P.rect(4, 21, 4, 5, x); P.rect(16, 21, 4, 5, x); P.rect(3, 25, 5, 1, X); P.rect(16, 25, 5, 1, X); }
+  if (tame) { P.rect(4, 11, 16, 1, tame.K); P.rect(10, 12, 4, 2, tame.K); }
+}
+function drawFiend(P, f, Q = FOE_PAL, tame) {
+  const X = Q.fX, x = Q.fx, x2 = Q.fx2, wing = Q.wing, wl = Q.wl, m = '#9a8f7c', E = Q.fE;
+  const up = f === 0 ? 0 : 4;
+  // крылья с перепонками
+  P.poly([[10, 11], [0, 1 + up], [4, 11 + up], [1, 16 + up], [10, 17]], wing);
+  P.line(10, 11, 1, 2 + up, wl); P.line(4, 11 + up, 9, 15, wl); P.line(2, 6 + up, 8, 13, wl);
+  P.poly([[18, 11], [28, 1 + up], [24, 11 + up], [27, 16 + up], [18, 17]], wing);
+  P.line(18, 11, 27, 2 + up, wl); P.line(24, 11 + up, 19, 15, wl); P.line(26, 6 + up, 20, 13, wl);
+  // туловище
+  P.rect(8, 10, 12, 13, X); P.rect(7, 13, 14, 8, X); P.rect(10, 12, 1, 10, x); P.rect(17, 12, 1, 10, x); P.px(14, 15, x2); P.px(13, 18, x2); P.px(14, 20, x2);
+  // рога и маска
+  P.rect(9, 0, 2, 4, BONE); P.rect(17, 0, 2, 4, BONE); P.px(8, 0, BONE); P.px(19, 0, BONE);
+  P.rect(9, 3, 10, 8, X); P.rect(10, 4, 8, 7, BONE); P.rect(13, 4, 2, 4, m);
+  P.px(11, 6, E); P.px(16, 6, E); P.px(12, 5, E); P.px(15, 5, E); P.px(11, 7, '#7a1a1a'); P.px(16, 7, '#7a1a1a');
+  P.rect(11, 9, 6, 1, m); P.px(12, 10, INK); P.px(14, 10, INK); P.px(16, 10, INK);
+  // руки с когтями
+  P.rect(5, 15, 2, 5, X); P.px(5, 20, BONE); P.px(6, 20, BONE); P.rect(21, 15, 2, 5, X); P.px(22, 20, BONE); P.px(21, 20, BONE);
+  if (f === 0) { P.rect(9, 23, 4, 9, x); P.rect(15, 23, 4, 9, x); P.rect(8, 32, 5, 1, X); P.rect(15, 32, 5, 1, X); }
+  else { P.rect(8, 23, 4, 9, x); P.rect(16, 23, 4, 9, x); P.rect(7, 32, 5, 1, X); P.rect(16, 32, 5, 1, X); }
+  if (tame) { P.rect(8, 13, 12, 1, tame.K); P.px(14, 14, tame.K); }
 }
 
 // ================== ПИКСЕЛЬ-АРТ: ПОСТРОЙКИ ==================
@@ -2056,7 +2418,7 @@ function buildAllTextures(scene) {
   buildNatureTextures(scene);
   buildNewTextures(scene);
 }
-const GAME_VERSION = 'v0.10';
+const GAME_VERSION = 'v0.12';
 // Сложность: lazy — логова выпускают волны через ночь; dmg — урон чудовищ и вражеских воинов; raid — размер набегов
 const DIFFS = {
   easy:   { name: 'Лёгкая',  lazy: true,  dmg: 0.75, raid: 1,    desc: 'логова нападают через ночь, враги бьют на четверть слабее' },
@@ -2598,11 +2960,13 @@ class GameScene extends Phaser.Scene {
   }
   drawHills(s) {
     const HS = HILLS[s];
+    // горы и холмы выше на большом экране, чтобы небо не пустовало
+    const MK = H / UH, HK = 1 + (MK - 1) * 0.6, snow = GROUND - MK * (GROUND - HS.snow);
     const mg = this.mountains.clear(), mlen = 0.05 * (WORLD - W) + W + 16;
     for (let x = 0; x < mlen; x += 3) {
-      const y = Math.round((GROUND - 150 - 70 * Math.abs(Math.sin(x / 260)) - 30 * Math.sin(x / 97 + 2) - 12 * Math.sin(x / 31)) / 3) * 3;
+      const y = Math.round((GROUND - MK * (150 + 70 * Math.abs(Math.sin(x / 260)) + 30 * Math.sin(x / 97 + 2) + 12 * Math.sin(x / 31))) / 3) * 3;
       mg.fillStyle(HS.m, 1).fillRect(x, y, 3, GROUND - y);
-      if (y < HS.snow) mg.fillStyle(0xdfe8ea, 1).fillRect(x, y, 3, Math.min(18, HS.snow - y + 3));
+      if (y < snow) mg.fillStyle(0xdfe8ea, 1).fillRect(x, y, 3, Math.min(24, snow - y + 3));
       else mg.fillStyle(HS.mt, 1).fillRect(x, y, 3, 3);
     }
     const hills = (g, sf, color, top, base, a1, a2) => {
@@ -2612,8 +2976,8 @@ class GameScene extends Phaser.Scene {
         g.fillStyle(color, 1).fillRect(x, y, 6, GROUND + 40 - y); g.fillStyle(top, 1).fillRect(x, y, 6, 3);
       }
     };
-    hills(this.hill1, 0.15, HS.h1, HS.h1t, GROUND - 110, 45, 18);
-    hills(this.hill2, 0.3, HS.h2, HS.h2t, GROUND - 64, 30, 14);
+    hills(this.hill1, 0.15, HS.h1, HS.h1t, GROUND - 110 * HK, 45 * HK, 18 * HK);
+    hills(this.hill2, 0.3, HS.h2, HS.h2t, GROUND - 64 * HK, 30 * HK, 14 * HK);
   }
   applySeason(s, first) {
     this.season = s;
@@ -3116,7 +3480,7 @@ class GameScene extends Phaser.Scene {
           if (b.t > 3) {
             tk.f.charges--; tk.f.taken = null; this.setForageLook(tk.f);
             b.carry = tk.f.kind;
-            b.carryImg = this.add.image(b.spr.x, GROUND - 74, tk.f.kind === 'berry' ? 'basket_b' : 'basket_m').setScale(S).setDepth(8);
+            b.carryImg = this.add.image(b.spr.x, GROUND - 90, tk.f.kind === 'berry' ? 'basket_b' : 'basket_m').setScale(S).setDepth(8);
             b.task = { type: 'deliver', x: c + Phaser.Math.Between(-50, 50) };
           }
         } else if (tk.type === 'deliver' || tk.type === 'shelter') {
@@ -3140,7 +3504,7 @@ class GameScene extends Phaser.Scene {
           }
         }
       }
-      if (b.carryImg) b.carryImg.setPosition(b.spr.x, GROUND - 74);
+      if (b.carryImg) b.carryImg.setPosition(b.spr.x, GROUND - 90);
       b.spr.setTexture(`bld_${frame}_${rk}`);
     }
   }
@@ -3150,7 +3514,7 @@ class GameScene extends Phaser.Scene {
     const U = UNITS[kind];
     const spr = this.add.sprite(x, GROUND, `${U.tex}_A_${this.rk}`).setOrigin(0.5, 1).setScale(S).setDepth(kind === 'siege' ? 6 : 7).setAlpha(0);
     this.tweens.add({ targets: spr, alpha: 1, duration: 300 });
-    this.units.push({ spr, kind, U, target: x + Phaser.Math.Between(-60, 60), wait: 0, ft: 0, f: 0, hp: U.hp, atk: 0, flash: 0, cast: 0, mode: 'patrol', den: null, side: this.units.length % 2 ? 1 : -1, post: Math.random() });
+    this.units.push({ spr, kind, U, target: x + Phaser.Math.Between(-60, 60), wait: 0, ft: 0, f: 0, hp: U.hp, atk: 0, flash: 0, cast: 0, mode: 'patrol', den: null, side: this.freeSide(), post: Math.random() });
     this.updateHud(true);
     this.toast(kind === 'siege' ? `${this.R.units.siege} собрана` : kind === 'dragon' ? `${this.R.units.dragon} прилетел: ${this.units.filter(u => u.kind === 'dragon').length}/${MAX_DRAGON}` : `${this.unitName(kind)} в строю: ${this.armyCount()}/${this.maxUnits()}`);
     if (kind === 'dragon') { music.sfx('rage'); this.cameras.main.shake(250, 0.006); }
@@ -3206,11 +3570,32 @@ class GameScene extends Phaser.Scene {
     const [o0, o1] = u.kind === 'siege' ? [230, 300] : (u.U.shot ? [120, 210] : [45, 100]);
     return wx - u.side * (o0 + (o1 - o0) * u.post);
   }
+  // ночью воины делятся между стенами поровну: каждый род войск отдельно, ближние к стене — к ней
+  balanceSides() {
+    const c = this.center, list = this.units.filter(u => u.mode !== 'follow');
+    const kinds = [...new Set(list.map(u => u.kind))];
+    let tilt = 0;
+    for (const k of kinds) {
+      const g = list.filter(u => u.kind === k).sort((a, b) => a.spr.x - b.spr.x);
+      const left = Math.floor(g.length / 2) + (g.length % 2 && tilt <= 0 ? 1 : 0);
+      if (g.length % 2) tilt += left > g.length / 2 ? 1 : -1;
+      g.forEach((u, i) => { u.side = i < left ? -1 : 1; });
+    }
+  }
+  // днём примерно половина обходов — дозор сразу за стенами
+  patrolTarget(u, a, b) {
+    const L = this.edge(-1), R = this.edge(1);
+    if (u.kind !== 'siege' && L && R && Math.random() < 0.5) return Math.random() < 0.5 ? L.x - Phaser.Math.Between(60, 320) : R.x + Phaser.Math.Between(60, 320);
+    return Phaser.Math.Between(L ? L.x + 40 : a, R ? R.x - 40 : b);
+  }
+  freeSide() { let l = 0, r = 0; for (const u of this.units) { if (u.side < 0) l++; else r++; } return l <= r ? -1 : 1; }
   patrolBounds(u) {
     const c = this.center;
     if (u && u.kind === 'siege') return [c - 260, c + 260];
     const L = this.edge(-1), Rr = this.edge(1);
-    return [L ? L.x + 40 : c - 420, Rr ? Rr.x - 40 : c + 420];
+    // днём воины выходят за стены на небольшое расстояние; ночью стоят на постах
+    const out = u && !this.isNight && !this.waveSent ? 320 : -40;
+    return [L ? L.x - out : c - 420 - Math.max(0, out), Rr ? Rr.x + out : c + 420 + Math.max(0, out)];
   }
   updateUnits(dt) {
     const c = this.center, rk = this.rk;
@@ -3224,7 +3609,7 @@ class GameScene extends Phaser.Scene {
       const guard = this.isNight || this.waveSent;
       const sight = u.kind === 'siege' ? U.range : (u.mode === 'assault' ? 280 : (guard ? 340 : 380));
       const foe = this.nearestEnemy(u.spr.x, Math.max(sight, U.range));
-      const foeOk = foe && (u.mode === 'assault' || Math.abs(foe.spr.x - c) < 1100);
+      const [fpl, fpr] = this.perimeter(), foeOk = foe && (u.mode === 'assault' || u.mode === 'scout' || (foe.spr.x > Math.min(c - 1100, fpl - 450) && foe.spr.x < Math.max(c + 1100, fpr + 450)));
       if (foeOk) {
         const dx = foe.spr.x - u.spr.x; u.spr.setFlipX(dx < 0);
         if (Math.abs(dx) < U.range) { if (u.atk <= 0) { u.atk = U.cd; if (U.shot) this.shoot(u, foe.spr.x, foe, null); else { this.meleeFx(u.spr, foe.spr.x, heavy); this.damageEnemy(foe, U.dmg * this.dmgMul()); } } }
@@ -3243,7 +3628,7 @@ class GameScene extends Phaser.Scene {
       } else if (u.wait > 0) u.wait -= dt;
       else {
         const dx = u.target - u.spr.x;
-        if (Math.abs(dx) < 3) { u.wait = Phaser.Math.FloatBetween(0.8, 3); u.target = Phaser.Math.Between(a, b); }
+        if (Math.abs(dx) < 3) { u.wait = Phaser.Math.FloatBetween(0.8, 3); u.target = this.patrolTarget(u, a, b); }
         else { moveDir = Math.sign(dx); if (Math.abs(u.spr.x - c) > 1000) speed = u.kind === 'siege' ? 80 : 120; else if (u.kind === 'siege') speed = U.speed; }
       }
       if (moveDir) { u.spr.x += moveDir * speed * dt; u.spr.setFlipX(moveDir < 0); u.ft += dt; if (u.ft > 0.18) { u.ft = 0; u.f ^= 1; } }
@@ -3278,6 +3663,7 @@ class GameScene extends Phaser.Scene {
     return list.slice(0, winter ? 12 : 9);
   }
   sendWaves() {
+    this.balanceSides();
     this.waveSent = true;
     const nn = this.nightCount + 1, winter = this.season === 3, angry = !!this.storm;
     let total = 0, rage = null;
@@ -3338,7 +3724,7 @@ class GameScene extends Phaser.Scene {
       const take = Math.min(this.coins, e.F.steal);
       this.coins -= take; this.updateHud(); this.grabLoot(e, take);
       if (this.coins === 0) this.setDanger(true);
-      else if (this.time.now - this.lastSteal > 3000) { this.lastSteal = this.time.now; this.toast(`Чудовище отняло монет: ${take}`); }
+      else if (this.time.now - this.lastSteal > 3000) { this.lastSteal = this.time.now; this.toast(`${e.fac === "foe" ? "Враг" : "Чудовище"} отнял${e.fac === "foe" ? "" : "о"} монет: ${take}`); }
     } else if (!this.danger) this.setDanger(true);
     else this.gameOver();
   }
@@ -3414,6 +3800,13 @@ class GameScene extends Phaser.Scene {
         continue;
       }
       if (e.state === 'idle') {
+        const pd = Math.abs(this.player.x - e.spr.x);
+        if (pd < 250 && !this.over) {
+          const dx = this.player.x - e.spr.x; e.spr.setFlipX(dx < 0);
+          if (pd < 26) { if (e.atk <= 0) { e.atk = 1.2; this.meleeFx(e.spr, this.player.x, 'claw'); this.hitPlayer(e); } }
+          else if (!this.blockingBuilding(e.spr.x, Math.sign(dx))) e.spr.x += Math.sign(dx) * F.spd * dt;
+          continue;
+        }
         const near = this.nearestOpp(e, 220);
         if (near) { const dx = near.spr.x - e.spr.x; e.spr.setFlipX(dx < 0); if (!this.blockingBuilding(e.spr.x, Math.sign(dx))) e.spr.x += Math.sign(dx) * F.spd * dt; continue; }
         if (e.wait > 0) { e.wait -= dt; continue; }
@@ -3558,7 +3951,8 @@ class GameScene extends Phaser.Scene {
   // ---------- главный цикл ----------
   update(time, delta) {
     const dt = Math.min(delta, 50) / 1000, k = this.keys, rk = this.rk, c = this.center, JD = Phaser.Input.Keyboard.JustDown;
-    if (!this.panelOpen) this.updateReflection(time);
+    // отражение в воде обновляем через кадр: заметно легче, а глазу не видно
+    this.reflF = (this.reflF || 0) ^ 1; if (!this.panelOpen && this.reflF) this.updateReflection(time);
     if (this.panelOpen) {
       const rb = this.panelOpen.buttons.find(b => b.key === 'R');
       if (JD(k.ENTER)) this.panelOpen.buttons[0].fn(); else if (JD(k.R) && rb) rb.fn(); else if (JD(k.ESC) && this.paused) (this.panelOpen.onEsc ? this.panelOpen.onEsc() : this.togglePause());
@@ -3906,7 +4300,7 @@ class GameScene extends Phaser.Scene {
     for (let i = 0; i < 160; i++) this.rain.push(this.add.rectangle(R0() * W, R0() * H, 2, 12, 0xa8c0d0, 0.5).setScrollFactor(0).setDepth(57).setAngle(12).setVisible(false));
     this.stormShade = this.add.rectangle(0, 0, W, H, 0x22303c, 0).setOrigin(0).setScrollFactor(0).setDepth(49);
     const vx = 0.05 * (this.center - W / 2) + W * 0.3;
-    this.volcano = this.add.image(vx, GROUND - 96, 'volcano').setOrigin(0.5, 1).setScale(3).setScrollFactor(0.05).setDepth(-25);
+    this.volcano = this.add.image(vx, GROUND - 110, 'volcano').setOrigin(0.5, 1).setScale(4).setScrollFactor(0.05).setDepth(-25);
     this.volcanoGlow = this.add.image(vx, GROUND - 96 - 46 * 3, 'glow_red').setScale(2).setScrollFactor(0.05).setBlendMode(Phaser.BlendModes.ADD).setDepth(-24.5).setAlpha(0);
     this.lava = [];
     this.thunderT = 6;
@@ -4166,7 +4560,7 @@ Object.assign(GameScene.prototype, {
   },
   foeAttack(e, opp) {
     const dmg = e.U.dmg * this.foe.dmgMul * (opp.fac ? 1 : this.diff.dmg), f = this.foe;
-    if (!e.U.shot) { this.meleeFx(e.spr, opp.spr.x, e.kind === 'beast' ? 'heavy' : 'slash'); this.hurt(opp, dmg); return; }
+    if (!e.U.shot) { this.meleeFx(e.spr, opp.spr.x, e.kind === 'beast' ? 'heavy' : 'slash'); if (opp.isPlayer) this.hitPlayer(e); else this.hurt(opp, dmg); return; }
     if (e.kind === 'mage') e.cast = 0.35;
     const key = e.kind === 'mage' ? `orb_${f.race}_foe` : f.race === 'goblin' ? 'pebble' : f.race === 'orc' ? 'javelin' : 'arrow';
     const a = this.add.image(e.spr.x, GROUND - 46, key).setScale(S).setDepth(9).setFlipX(opp.spr.x < e.spr.x), tx = opp.spr.x;
@@ -4174,14 +4568,18 @@ Object.assign(GameScene.prototype, {
     this.tweens.add({ targets: a, x: tx, y: GROUND - 30, duration: Math.abs(tx - e.spr.x) * 1.5 + 100, ease: 'Sine.in', onComplete: () => {
       a.destroy();
       if (e.kind === 'mage') { for (const u of [...this.units]) if (Math.abs(u.spr.x - tx) < 46) this.damageUnit(u, dmg); }
-      else if (opp.spr && opp.spr.active) this.hurt(opp, dmg);
+      else if (!opp.isPlayer && opp.spr && opp.spr.active) this.hurt(opp, dmg);
+      if (opp.isPlayer && !e.dead && Math.abs(this.player.x - tx) < 40) this.hitPlayer(e);
     } });
   },
   moveE(e, dx) { if (!dx) return; e.spr.x += dx; e.spr.setFlipX(dx < 0); },
   updateFoeUnit(e, dt) {
     const U = e.U, c = this.center;
-    const opp = this.nearestOpp(e, Math.max(e.state === 'raid' ? 280 : 340, U.range));
-    const nearHome = Math.abs(e.spr.x - ENEMY_X) < 1350;
+    const nearHome = Math.abs(e.spr.x - ENEMY_X) < 1350, sight = Math.max(e.state === 'raid' ? 280 : 340, U.range);
+    let opp = this.nearestOpp(e, sight);
+    // монарх рядом с вражеским городом или с отрядом набега — тоже цель
+    const pd = Math.abs(this.player.x - e.spr.x);
+    if ((nearHome || e.state === 'raid') && !this.over && pd < sight && (!opp || pd < Math.abs(opp.spr.x - e.spr.x))) opp = this.playerTarget();
     if (opp && (e.state === 'raid' || nearHome)) {
       const dx = opp.spr.x - e.spr.x; e.spr.setFlipX(dx < 0);
       if (Math.abs(dx) < U.range) { if (e.atk <= 0) { e.atk = U.cd; this.foeAttack(e, opp); } return; }
@@ -4295,11 +4693,21 @@ Object.assign(GameScene.prototype, {
     for (const b of f.spots) {
       if (b.type !== 'tower' || !b.level) continue;
       b.cd = (b.cd || 0) - dt; if (b.cd > 0) continue;
-      const opp = this.nearestOpp({ spr: { x: b.x }, fac: 'foe' }, 300); if (!opp) continue;
+      let opp = this.nearestOpp({ spr: { x: b.x }, fac: 'foe' }, 300);
+      if (!opp && !this.over && Math.abs(this.player.x - b.x) < 300) opp = this.playerTarget();
+      if (!opp) continue;
       b.cd = b.level === 2 ? 1.1 : 1.6;
-      const a = this.add.image(b.x, GROUND - b.h + 30, 'arrow').setScale(S).setDepth(9).setFlipX(opp.spr.x < b.x), dmg = (b.level === 2 ? 2.2 : 1.5) * (opp.fac ? 1 : this.diff.dmg);
-      this.tweens.add({ targets: a, x: opp.spr.x, y: GROUND - 30, duration: Math.abs(opp.spr.x - b.x) * 1.5 + 160, ease: 'Sine.in', onComplete: () => { a.destroy(); if (opp.spr && opp.spr.active) this.hurt(opp, dmg); } });
+      const tx = opp.spr.x, a = this.add.image(b.x, GROUND - b.h + 30, 'arrow').setScale(S).setDepth(9).setFlipX(opp.spr.x < b.x), dmg = (b.level === 2 ? 2.2 : 1.5) * (opp.fac ? 1 : this.diff.dmg);
+      this.tweens.add({ targets: a, x: opp.spr.x, y: GROUND - 30, duration: Math.abs(opp.spr.x - b.x) * 1.5 + 160, ease: 'Sine.in', onComplete: () => { a.destroy(); if (opp.isPlayer) { if (Math.abs(this.player.x - tx) < 40) this.playerHitBy(b.x, 1); } else if (opp.spr && opp.spr.active) this.hurt(opp, dmg); } });
     }
+  },
+  playerTarget() { return { isPlayer: true, spr: this.player }; },
+  // удар по монарху от того, у кого нет спрайта-носильщика (башня): монеты уходят в казну врага
+  playerHitBy(x, steal) {
+    const fake = { spr: { x }, F: { steal }, loot: 0, lootImgs: [], state: '' };
+    this.hitPlayer(fake);
+    fake.lootImgs.forEach(i => i.destroy());
+    if (fake.loot && this.foe && this.foe.alive) this.foe.gold += fake.loot;
   },
   // куда идут чудовища из логова: к ближнему королевству; сильное логово в центре делит волну
   denTarget(d, i) {
