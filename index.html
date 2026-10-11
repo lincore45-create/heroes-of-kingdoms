@@ -31,9 +31,11 @@
 <div id="game"></div>
 <script>
 // ================== НАСТРОЙКИ ==================
-const W = 1152, H = 648;         // размер экрана (на 20% подробнее прежнего)
-const GROUND = 456;              // линия земли, на ней всё стоит
-const BANK = 485;                // где берег переходит в воду
+const W = 1440, H = 810;         // внутреннее разрешение мира: пиксель-арт на 25% мельче прежнего
+const GROUND = 570;              // линия земли, на ней всё стоит
+const BANK = 599;                // где берег переходит в воду
+// Интерфейс и меню рисуются в прежних координатах 1152×648 и увеличиваются в UI раз
+const UW = 1152, UH = 648, UI = W / UW, UGROUND = 456, UBANK = 485;
 const RH = H - BANK;             // высота полосы воды
 const WORLD = 30000;             // ширина мира
 const PLAYER_X = 7000;           // наш замок
@@ -42,7 +44,7 @@ const S = 3;                     // во сколько раз увеличив�
 const CYCLE = 170;               // длина суток в секундах
 const SEASON_LEN = 5;            // сколько ночей длится сезон
 const WALLET = 30;               // сколько монет помещается в кошелёк
-const MAX_SIEGE = 2;             // сколько осадных машин можно держать
+const MAX_SIEGE = 2, MAX_DRAGON = 2;             // сколько осадных машин можно держать
 // логова слева направо: среднее, слабое, [наш замок], среднее, сильное, среднее, [вражеский замок], слабое, среднее
 const DENS = [[1200, 2], [3900, 1], [10300, 2], [15000, 3], [19700, 2], [26100, 1], [28800, 2]];
 const HUTS = [2600, 5300, 8900, 12600];   // хижины бродяг на нашей половине
@@ -51,8 +53,8 @@ const SPOTS = { guild: -700, dwell: -420, hall: 0, bank: 260, farm: 480, forge: 
 const WALL_LINES = { '-1': [940, 3500, 6200], '1': [940, 3700, 8400, 13100] };
 const RETINUE_CALM = 25;         // через сколько секунд без боя свита расходится
 const FONT = '"Pixelify Sans", ui-monospace, monospace';
-const TXT = { fontFamily: FONT, fontSize: '18px', color: '#efe3c2', stroke: '#141d21', strokeThickness: 4 };
-const HPL = { hall: [20, 40, 60], dwell: [12, 20, 30], farm: [10, 16], wall: [16, 40], forge: [14, 20], guild: [12, 20], bank: [30], outpost: [24], tower: [14, 30] };
+const TXT = { fontFamily: FONT, fontSize: '18px', color: '#efe3c2', stroke: '#141d21', strokeThickness: 4, resolution: 2 };
+const HPL = { hall: [20, 40, 60], dwell: [12, 20, 30], farm: [10, 16], wall: [16, 40, 60], forge: [14, 20], guild: [12, 20], bank: [30], outpost: [24], tower: [14, 30], lodge: [10] };
 
 const SEASONS = [
   { key: 'spring', name: 'весна', Name: 'Весна' },
@@ -79,6 +81,9 @@ const UNITS = {
   timp:   { tex: 'aimp',   cost: 3, hp: 4,  dmg: 1.2, cd: 0.5, range: 24, speed: 115 },
   tbrute: { tex: 'abrute', cost: 5, hp: 12, dmg: 2.2, cd: 0.9, range: 30, speed: 80 },
   tfiend: { tex: 'afiend', cost: 8, hp: 18, dmg: 3,   cd: 0.8, range: 36, speed: 105 },
+  // уникальное существо народа (жилище на месте логова) и дракон (центральное логово)
+  uniq:   { tex: 'unq', cost: 7, hp: 16, dmg: 2.6, cd: 0.8, range: 34, speed: 100 },
+  dragon: { tex: 'drg', cost: 20, hp: 60, dmg: 4, cd: 1.8, range: 190, speed: 110, shot: 'fireball', aoe: 64, denMul: 1.5, fly: true },
 };
 const TAMED = { timp: 'Ручной бес', tbrute: 'Ручной громила', tfiend: 'Ручной демон' };
 const DEN_HIRE = [null, 'timp', 'tbrute', 'tfiend'];
@@ -88,20 +93,20 @@ const DEN_HIRE = [null, 'timp', 'tbrute', 'tfiend'];
 const RACES = {
   human: { name: 'Люди', hall: 'Ратуша', castle: 'Замок', citadel: 'Цитадель', builder: 'Рабочий', style: 'house',
     dwell: 'Казарма', dwell2: 'Казарма со стрельбищем', dwell3: 'Гнездо грифонов',
-    forge: 'Кузница', forge2: 'Оружейная', guild: 'Гильдия магов', guild2: 'Башня магов', bank: 'Банк', outpost: 'Зверинец', tower: 'Дозорная башня', tower2: 'Каменная башня',
-    units: { melee: 'Мечник', ranged: 'Лучник', beast: 'Грифон', mage: 'Маг', siege: 'Катапульта' },
+    forge: 'Кузница', forge2: 'Оружейная', guild: 'Гильдия магов', guild2: 'Башня магов', bank: 'Казна', tax: 'Сборщик налогов', outpost: 'Зверинец', tower: 'Дозорная башня', tower2: 'Каменная башня',
+    units: { melee: 'Мечник', ranged: 'Лучник', beast: 'Грифон', mage: 'Маг', siege: 'Катапульта', uniq: 'Единорог', dragon: 'Золотой дракон' }, uniqhome: 'Конюшня единорогов',
     pal: { K:'#f2c14e', k:'#b8862a', S:'#e8b796', s:'#c48a68', E:'#2a1f1a', H:'#6b4423', C:'#3a5f9e', c:'#26406b', Y:'#5c82c2', B:'#3b2a20',
            A:'#9aa3ad', a:'#6c747d', Q:'#cdd3d9', W:'#e4e8ec', R:'#a33b2f', r:'#6e2620', L:'#cbb894', l:'#8f7d5c', D:'#4a3022', G:'#7fb8ff' } },
   orc: { name: 'Орки', hall: 'Шатёр вождя', castle: 'Крепость орды', citadel: 'Твердыня', builder: 'Работяга', style: 'tent',
     dwell: 'Логово', dwell2: 'Логово метателей', dwell3: 'Яма огров',
-    forge: 'Кузня', forge2: 'Военная кузня', guild: 'Круг шаманов', guild2: 'Святилище духов', bank: 'Сокровищница', outpost: 'Яма зверей', tower: 'Вышка', tower2: 'Каменная вышка',
-    units: { melee: 'Громила', ranged: 'Метатель', beast: 'Огр', mage: 'Шаман', siege: 'Камнемёт' },
+    forge: 'Кузня', forge2: 'Военная кузня', guild: 'Круг шаманов', guild2: 'Святилище духов', bank: 'Сокровищница', tax: 'Сборщик дани', outpost: 'Яма зверей', tower: 'Вышка', tower2: 'Каменная вышка',
+    units: { melee: 'Громила', ranged: 'Метатель', beast: 'Огр', mage: 'Шаман', siege: 'Камнемёт', uniq: 'Циклоп', dragon: 'Красный дракон' }, uniqhome: 'Пещера циклопов',
     pal: { K:'#d9c48a', k:'#9c8a58', S:'#6f9a4a', s:'#517634', E:'#1b1b12', H:'#2b2b20', C:'#8a3b2a', c:'#5c261b', Y:'#b0573f', B:'#2a1d14',
            A:'#6d5642', a:'#46382b', Q:'#8e7558', W:'#d6cfbd', R:'#8a5a34', r:'#5c3a20', L:'#7b6a55', l:'#4f4335', D:'#2a1d14', G:'#ff8a3a' } },
   goblin: { name: 'Гоблины', hall: 'Большая нора', castle: 'Подземный чертог', citadel: 'Гоблинград', builder: 'Мастеровой', style: 'mound',
     dwell: 'Нора', dwell2: 'Нора пращников', dwell3: 'Пещера троллей',
-    forge: 'Мастерская', forge2: 'Механическая мастерская', guild: 'Хижина колдуна', guild2: 'Башня колдунов', bank: 'Хранилище', outpost: 'Загон чудищ', tower: 'Сторожка', tower2: 'Каменная сторожка',
-    units: { melee: 'Копейщик', ranged: 'Пращник', beast: 'Тролль', mage: 'Колдун', siege: 'Требушет' },
+    forge: 'Мастерская', forge2: 'Механическая мастерская', guild: 'Хижина колдуна', guild2: 'Башня колдунов', bank: 'Хранилище', tax: 'Мытарь', outpost: 'Загон чудищ', tower: 'Сторожка', tower2: 'Каменная сторожка',
+    units: { melee: 'Копейщик', ranged: 'Пращник', beast: 'Тролль', mage: 'Колдун', siege: 'Требушет', uniq: 'Гигантский паук', dragon: 'Зелёный дракон' }, uniqhome: 'Паучье гнездо',
     pal: { K:'#e09a3e', k:'#a86a22', S:'#b6c24a', s:'#8c9832', E:'#20160f', H:'#3e3a1f', C:'#6a3f86', c:'#472a5b', Y:'#8c5cb0', B:'#2d2218',
            A:'#7f6a4a', a:'#56472f', Q:'#a08a62', W:'#d0a066', R:'#4f6b3a', r:'#344a26', L:'#8c7a58', l:'#5e5139', D:'#2d2218', G:'#8aff6a' } },
 };
@@ -109,6 +114,7 @@ const RACES = {
 // Вражеское королевство
 const FOE_HP = { hall: [90, 140, 200], wall: [30, 60], dwell: [20, 30, 40], tower: [24, 40] };
 const KINGDOM_PAL = (p) => ({ ...p, C: '#8a1e2a', c: '#5a1018', Y: '#b8343e', K: '#e0d8c8', k: '#a09888', G: '#ff5a4a', R: mix(p.R, '#5a1018', 0.45), r: mix(p.r, '#2a0a10', 0.4) });
+const TAX_MAX = 2, TAX_COST = 5, TAX_BAG = 8;   // сборщики налогов: сколько, цена, сколько монет несут за раз
 const FARM_SLOTS = [0, 2, 4];       // сколько рабочих помещается на ферме
 const FARM_RATE = [0, 12, 14];      // раз во сколько секунд один рабочий приносит монету
 
@@ -558,6 +564,17 @@ function drawVillager(P, f, v, p, st) {
   if (st === 'tent') { P.px(5, 5, p.W); P.rect(3, 5, 4, 1, skin); }
   if (st === 'mound') { P.rect(0, 3, 3, 1, skin); P.px(7, 3, skin); P.px(8, 2, skin); P.px(6, 3, p.K); }
 }
+// сборщик налогов: кафтан цвета народа, шляпа, мешок с монетами
+function drawTax(P, f, p, st) {
+  const skin = st === 'house' ? '#e8b796' : p.S;
+  legs(P, 3, 6, 12, 4, f, '#3a3028', '#2a2018', '#1a1410', 1);
+  P.rect(2, 6, 6, 6, p.C); P.rect(2, 6, 1, 6, p.c); P.rect(2, 9, 6, 1, '#c9a85a'); P.rect(2, 11, 6, 1, p.c);
+  P.rect(3, 2, 4, 4, skin); P.px(6, 3, INK);
+  P.rect(2, 0, 5, 2, '#2a1d14'); P.rect(1, 2, 7, 1, '#2a1d14'); P.px(5, 0, p.K);
+  if (st === 'mound') { P.px(0, 3, skin); P.px(1, 3, skin); P.px(7, 3, skin); }
+  if (st === 'tent') { P.px(5, 5, p.W); }
+  P.ell(9.5, 10, 2, 2.2, '#8f6a3c'); P.px(9, 7, '#5a3820'); P.px(10, 9, '#f2c14e'); P.px(9, 11, '#6e5030');
+}
 function drawCart(P, p, f) {
   const w = '#7a5234', wd = '#5a3820', wl = '#9a6a44', ox = '#8a6a4a', oxd = '#6a4a30';
   // вол
@@ -619,6 +636,7 @@ function buildCharTextures(scene) {
       silhouette(scene, `${key}_A_${k}`, `${key}_X_${k}`, '#e03a3a');
     }
     for (let v = 0; v < 4; v++) { paintTex(scene, `vil_A_${v}_${k}`, 10, 17, P => drawVillager(P, 0, v, p, st)); paintTex(scene, `vil_B_${v}_${k}`, 10, 17, P => drawVillager(P, 1, v, p, st)); }
+    paintTex(scene, 'tax_A_' + k, 12, 17, P => drawTax(P, 0, p, st)); paintTex(scene, 'tax_B_' + k, 12, 17, P => drawTax(P, 1, p, st));
     paintTex(scene, 'cart_A_' + k, 29, 16, P => drawCart(P, p, 0));
     paintTex(scene, 'cart_B_' + k, 29, 16, P => drawCart(P, p, 1));
   }
@@ -627,6 +645,344 @@ function buildCharTextures(scene) {
   paintTex(scene, 'javelin', 12, 1, P => { P.rect(0, 0, 9, 1, '#6b4c33'); P.rect(9, 0, 3, 1, '#d6cfbd'); });
   paintTex(scene, 'pebble', 3, 3, P => { P.rect(0, 0, 3, 3, STONE); P.px(0, 0, STONE2); P.px(2, 2, STONE3); });
   paintTex(scene, 'boulder', 6, 6, P => { P.ell(3, 3, 3, 3, STONE); P.ell(2.3, 2.3, 1.3, 1.3, STONE2); P.px(4, 4, STONE3); });
+}
+
+// ================== ПИКСЕЛЬ-АРТ: ТЕМЫ ЛОГОВ, РАСОВЫЕ СУЩЕСТВА, ДРАКОНЫ ==================
+// Три темы логов. Сила (слабый, средний, сильный) у всех общая, отличается только облик.
+const DEN_THEMES = {
+  imp:   { name: 'Логово бесов',    tex: ['imp', 'brute', 'fiend'], glow: 'glow_red' },
+  gob:   { name: 'Лагерь дикарей',  tex: ['wgob', 'hob', 'warg'],   glow: 'glow_fire' },
+  gnome: { name: 'Шахта гномов',    tex: ['gnome', 'dwarf', 'golem'], glow: 'glow_fire' },
+};
+const THEME_KIND = { imp: 0, brute: 1, fiend: 2 };
+const WILD_GOB = { g: '#6f7f45', gd: '#4f5c30', gh: '#8c9c5a', rag: '#6a4a30', ragd: '#4a3220', e: '#ffd23a' };
+const WILD_GNOME = { cap: '#b0302a', capd: '#7a1e1a', beard: '#ddd4c2', skin: '#e0a080', coat: '#4a5a7a', coatd: '#33405a', e: INK };
+
+// ---------- дикий гоблин (12×16) ----------
+function drawWGob(P, f, Q = WILD_GOB) {
+  const o = f ? 1 : 0;
+  P.rect(3 - o, 12, 2, 3, Q.gd); P.rect(7 + o, 12, 2, 3, Q.g); P.rect(2 - o, 15, 3, 1, Q.ragd); P.rect(7 + o, 15, 3, 1, Q.ragd);
+  P.poly([[2, 7], [9, 6], [10, 12], [2, 12]], Q.rag); P.rect(2, 11, 8, 1, Q.ragd); P.px(4, 9, Q.ragd); P.px(7, 10, Q.ragd);
+  P.rect(1, 8, 2, 3, Q.gd);
+  P.rect(5, 2, 6, 5, Q.g); P.rect(5, 6, 6, 1, Q.gd); P.rect(6, 1, 4, 1, Q.gh);
+  P.line(5, 3, 2, 1, Q.g); P.px(1, 0, Q.gh); P.px(11, 2, Q.g); P.px(11, 1, Q.gh);
+  P.px(7, 3, Q.e); P.px(9, 3, Q.e); P.rect(7, 5, 4, 1, INK); P.px(8, 5, BONE); P.px(10, 5, BONE); P.px(11, 4, Q.gh);
+  P.rect(9, 8, 2, 2, Q.g); P.line(11, 8, 11, 3, '#c8ccd0'); P.px(11, 9, '#5a3820');
+}
+// ---------- хобгоблин с шипастой дубиной (19×21) ----------
+function drawHob(P, f, Q = WILD_GOB) {
+  const o = f ? 1 : 0, metal = '#7a7a74';
+  P.rect(5 - o, 15, 3, 5, Q.gd); P.rect(11 + o, 15, 3, 5, Q.g); P.rect(4 - o, 20, 4, 1, Q.ragd); P.rect(11 + o, 20, 4, 1, Q.ragd);
+  P.rect(2, 8, 3, 7, Q.gd); P.rect(2, 14, 3, 2, Q.gd);
+  P.ell(9.5, 11, 6.5, 5.5, sh3(Q.gh, Q.g, Q.gd));
+  P.rect(4, 13, 11, 3, Q.rag); P.rect(4, 15, 11, 1, Q.ragd); P.rect(8, 13, 3, 1, metal);
+  P.rect(3, 6, 5, 2, metal); P.px(4, 5, BONE); P.px(6, 5, BONE);
+  P.rect(8, 1, 7, 6, Q.g); P.rect(8, 6, 7, 1, Q.gd); P.rect(9, 0, 5, 1, Q.gh);
+  P.line(8, 2, 6, 0, Q.g); P.line(14, 2, 16, 0, Q.g);
+  P.px(10, 3, Q.e); P.px(13, 3, Q.e); P.rect(10, 5, 5, 1, INK); P.px(10, 6, BONE); P.px(14, 6, BONE);
+  P.rect(14, 8, 3, 5, Q.g); P.rect(15, 12, 2, 2, Q.g);
+  P.line(16, 12, 16, 3, '#6b4c33', 2); P.ell(16.5, 3, 2, 3, '#5a3820'); P.px(14, 2, BONE); P.px(18, 1, BONE); P.px(18, 4, BONE); P.px(15, 0, BONE);
+}
+// ---------- вождь дикарей верхом на варге (27×23) ----------
+function drawWarg(P, f, Q = WILD_GOB) {
+  const W1 = '#5a5048', w1 = '#3e362f', wh = '#7a6e62';
+  const L = f ? [[5, 16, 3, 21], [9, 16, 11, 21], [17, 16, 15, 21], [21, 16, 23, 21]] : [[5, 16, 5, 21], [9, 16, 9, 21], [17, 16, 17, 21], [21, 16, 21, 21]];
+  for (const [a, b, c, d] of L) { P.line(a, b, c, d, w1, 2); P.rect(c, d + 1, 3, 1, INK); }
+  P.line(5, 13, 1, 9, w1, 2); P.px(0, 8, wh);
+  P.ell(13, 14, 9.5, 4.3, sh3(wh, W1, w1));
+  for (let i = 0; i < 5; i++) P.px(8 + i * 3, 11, w1);
+  P.poly([[19, 10], [23, 8], [26, 10], [26, 13], [21, 15]], W1); P.poly([[19, 9], [20, 6], [22, 9]], w1);
+  P.px(23, 10, Q.e); P.px(25, 13, BONE); P.px(23, 13, BONE); P.rect(22, 12, 4, 1, INK);
+  P.rect(12, 11, 3, 4, Q.ragd);
+  P.rect(10, 6, 6, 5, Q.rag); P.rect(10, 10, 6, 1, Q.ragd); P.px(12, 8, Q.ragd);
+  P.rect(11, 1, 5, 5, Q.g); P.rect(11, 5, 5, 1, Q.gd); P.px(14, 3, Q.e); P.line(11, 2, 9, 0, Q.g);
+  P.rect(11, 0, 5, 2, BONE); P.px(12, 1, INK); P.px(14, 1, INK); P.rect(13, 4, 3, 1, INK);
+  P.line(16, 8, 25, 1, '#6b4c33'); P.px(26, 0, '#c8ccd0'); P.px(25, 0, '#c8ccd0'); P.px(26, 1, '#c8ccd0');
+  P.rect(8, 6, 2, 1, '#a33b2f'); P.px(8, 7, '#a33b2f');
+}
+// ---------- гном с киркой (12×16) ----------
+function drawGnome(P, f, Q = WILD_GNOME) {
+  const o = f ? 1 : 0, boot = '#3b2a20';
+  P.rect(3 - o, 13, 2, 2, Q.coatd); P.rect(7 + o, 13, 2, 2, Q.coat); P.rect(2 - o, 15, 3, 1, boot); P.rect(7 + o, 15, 3, 1, boot);
+  P.rect(2, 8, 8, 5, Q.coat); P.rect(2, 8, 1, 5, Q.coatd); P.rect(2, 12, 8, 1, Q.coatd);
+  P.rect(1, 9, 2, 3, Q.coatd); P.px(1, 12, Q.skin);
+  P.poly([[3, 6], [9, 6], [8, 11], [6, 12], [4, 11]], Q.beard); P.px(6, 10, mix(Q.beard, '#000000', 0.18));
+  P.rect(4, 4, 5, 3, Q.skin); P.px(7, 5, Q.e); P.px(9, 5, '#d07060'); P.px(4, 6, Q.beard);
+  P.poly([[3, 5], [10, 5], [6, 0]], Q.cap); P.rect(3, 4, 7, 1, Q.capd); P.line(6, 0, 3, 1, Q.cap); P.px(2, 2, Q.capd);
+  P.rect(9, 8, 2, 2, Q.coat); P.line(10, 9, 10, 2, '#6b4c33'); P.line(8, 2, 11, 3, STONE2); P.px(7, 3, STONE);
+}
+// ---------- гном-воин в броне с молотом (19×21) ----------
+function drawDwarf(P, f, Q = WILD_GNOME) {
+  const o = f ? 1 : 0, A = '#8a8d92', a = '#5e6166', Ah = '#b0b3b8', beard = '#c0703a', bd = '#8a4a22', boot = '#3b2a20';
+  P.rect(5 - o, 16, 3, 4, a); P.rect(11 + o, 16, 3, 4, A); P.rect(4 - o, 20, 4, 1, boot); P.rect(11 + o, 20, 4, 1, boot);
+  P.rect(2, 9, 3, 6, a); P.rect(2, 14, 3, 2, Q.skin);
+  P.ell(9.5, 12, 6.5, 5, sh3(Ah, A, a)); P.rect(4, 15, 11, 2, Q.coat); P.rect(8, 15, 3, 1, '#d8b85a');
+  P.poly([[6, 7], [14, 7], [13, 14], [10, 16], [7, 14]], beard); P.line(10, 9, 10, 15, bd); P.px(8, 12, bd); P.px(12, 12, bd);
+  P.rect(7, 4, 7, 4, Q.skin); P.px(9, 5, INK); P.px(12, 5, INK); P.px(14, 6, '#d07060');
+  P.rect(6, 1, 9, 4, A); P.rect(6, 1, 9, 1, Ah); P.rect(10, 4, 1, 3, a);
+  P.line(6, 2, 3, 0, BONE); P.line(14, 2, 17, 0, BONE);
+  P.rect(14, 9, 3, 5, A); P.rect(15, 13, 2, 2, Q.skin);
+  P.line(16, 14, 16, 4, '#6b4c33', 2); P.rect(13, 1, 6, 5, a); P.rect(13, 1, 6, 1, Ah); P.px(18, 3, Ah);
+}
+// ---------- каменный голем с рунами (22×26) ----------
+function drawGolem(P, f, Q = WILD_GNOME) {
+  const s1 = '#7d776c', s2 = '#5c574e', s3 = '#a19a8c', rune = '#ff9a3a';
+  const lx = f ? [4, 13] : [5, 12];
+  P.rect(lx[0], 19, 5, 6, s2); P.rect(lx[1], 19, 5, 6, s1); P.rect(lx[0] - 1, 25, 6, 1, s2); P.rect(lx[1], 25, 6, 1, s2);
+  P.rect(0, 9, 5, 9, s2); P.rect(0, 17, 5, 3, s1);
+  P.rect(17, 9, 5, 9, s1); P.rect(17, 17, 5, 3, s3);
+  P.rect(4, 8, 14, 12, s1); P.rect(4, 8, 14, 2, s3); P.rect(4, 18, 14, 2, s2);
+  P.line(8, 10, 7, 17, s2); P.line(14, 11, 15, 17, s2);
+  P.px(11, 12, rune); P.px(10, 13, rune); P.px(12, 13, rune); P.px(11, 14, rune); P.px(11, 15, rune);
+  P.rect(7, 1, 8, 7, s1); P.rect(7, 1, 8, 1, s3); P.rect(7, 7, 8, 1, s2);
+  P.rect(8, 4, 2, 1, rune); P.rect(12, 4, 2, 1, rune);
+  P.px(6, 3, s2); P.px(15, 2, s2);
+  for (const [x, y] of [[5, 11], [16, 14], [9, 18], [13, 9]]) P.px(x, y, '#4f6b3a');
+}
+
+// ---------- логова по темам (64×48) ----------
+function paintCamp(P, w, h, seed) {
+  const R0 = rng(seed), hide = '#8a6a48', hided = '#6a4e34', hidel = '#a8865e', pole = '#4a3422', cx = w / 2;
+  P.poly([[4, h], [cx, 7], [w - 4, h]], (x, y) => ((x * 3 + y) % 11 === 0 ? hided : x < cx - (h - y) * 0.15 ? hidel : hide));
+  for (let i = 0; i < 5; i++) { const y = 14 + i * 7; P.line(cx - (y - 7) * 0.62, y, cx + (y - 7) * 0.62, y + 1, hided); }
+  P.line(cx - 6, 0, cx + 2, 12, pole, 2); P.line(cx + 6, 0, cx - 2, 12, pole, 2); P.line(cx, 1, cx, 10, pole, 2);
+  for (let i = 0; i < 6; i++) P.rect(Math.round(10 + R0() * (w - 20)), Math.round(20 + R0() * (h - 26)), 3, 2, hided);
+  P.poly([[cx - 10, h], [cx - 8, h - 16], [cx, h - 22], [cx + 8, h - 16], [cx + 10, h]], '#0a0806');
+  P.poly([[cx - 11, h], [cx - 9, h - 17], [cx - 7, h - 17], [cx - 8, h]], hidel);
+  for (const [ex, ey] of [[cx - 4, h - 10], [cx - 1, h - 10], [cx + 3, h - 15], [cx + 6, h - 15], [cx - 6, h - 5], [cx - 4, h - 5]]) P.px(ex, ey, '#ffd23a');
+  P.rect(3, h - 30, 2, 30, pole); P.rect(1, h - 34, 6, 5, BONE); P.px(2, h - 32, INK); P.px(5, h - 32, INK); P.rect(3, h - 29, 2, 1, BONE); P.line(0, h - 26, 7, h - 24, pole);
+  P.rect(w - 5, h - 36, 2, 36, pole); P.poly([[w - 4, h - 36], [w - 14, h - 33], [w - 11, h - 30], [w - 15, h - 27], [w - 4, h - 28]], '#a33b2f'); P.px(w - 12, h - 31, '#6e2620');
+  P.rect(8, h - 2, 7, 2, '#3a2a20'); P.px(10, h - 3, '#ff8a3a'); P.px(12, h - 4, '#ffd23a'); P.px(11, h - 3, '#ffb03a');
+  P.rect(w - 16, h - 2, 4, 1, BONE); P.px(w - 12, h - 3, BONE); P.rect(18, h - 1, 3, 1, BONE);
+}
+function paintMine(P, w, h, seed) {
+  const R0 = rng(seed), cx = w / 2, d1 = '#2e2a24', d2 = '#4a443a', d3 = '#625a4c', d4 = '#7a7262', wood = '#7a5234', woodD = '#5a3820';
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const nx = (x + 0.5 - cx) / (w / 2), ny = (h - (y + 0.5)) / (h * 0.86), d = nx * nx + ny * ny;
+    if (d > 1 + (R0() - 0.5) * 0.12) continue;
+    let c = d2; if (nx < -0.2 && ny > 0.4) c = d3; if (nx < -0.45 && ny > 0.6) c = d4; if (nx > 0.4 || d > 0.85) c = d1; if (R0() < 0.07) c = d1; if (R0() < 0.03) c = '#c9b06a';
+    P.px(x, y, c);
+  }
+  P.rect(cx - 9, h - 22, 18, 22, '#0a0806');
+  P.rect(cx - 12, h - 24, 3, 24, wood); P.rect(cx + 9, h - 24, 3, 24, wood); P.rect(cx - 13, h - 27, 26, 3, wood); P.rect(cx - 13, h - 25, 26, 1, woodD);
+  P.rect(cx - 12, h - 24, 1, 24, woodD); P.rect(cx + 9, h - 24, 1, 24, woodD);
+  for (const [ex, ey] of [[cx - 4, h - 9], [cx - 1, h - 9], [cx + 3, h - 14], [cx + 5, h - 14]]) P.px(ex, ey, '#ffd23a');
+  P.rect(cx - 16, h - 1, 32, 1, STONE3); for (let x = cx - 15; x < cx + 16; x += 4) P.rect(x, h - 2, 2, 1, woodD);
+  P.rect(cx + 12, h - 8, 10, 6, '#4f4f4b'); P.rect(cx + 12, h - 8, 10, 1, STONE2); P.rect(cx + 13, h - 10, 8, 2, '#c9b06a'); P.px(cx + 14, h - 11, '#e0c880');
+  P.ell(cx + 14, h - 1.5, 1.5, 1.5, INK); P.ell(cx + 20, h - 1.5, 1.5, 1.5, INK);
+  P.rect(cx - 15, h - 22, 1, 4, INK); P.rect(cx - 16, h - 18, 3, 3, '#ffd23a'); P.px(cx - 15, h - 17, '#fff1b0');
+  P.line(cx - 5, h - 33, cx + 5, h - 29, '#6b4c33'); P.line(cx + 5, h - 33, cx - 5, h - 29, '#6b4c33');
+  P.rect(cx - 7, h - 34, 3, 2, STONE2); P.rect(cx + 4, h - 34, 3, 2, STONE2);
+}
+
+// ---------- уникальные существа народов (жилище на месте логова) ----------
+function drawUniq(P, p, st, f) {
+  if (st === 'house') {
+    // единорог
+    const N = '#ece8e0', n = '#c8c2b8', m = '#ffffff', mane = '#9ac8ff', horn = '#f2c14e', hoof = '#8a8478';
+    const L = f === 0 ? [[6, 15, 6, 21, n], [18, 15, 18, 21, n], [9, 15, 9, 21, N], [21, 15, 21, 21, N]] : [[7, 15, 9, 21, n], [18, 15, 15, 21, n], [9, 15, 5, 20, N], [21, 15, 24, 20, N]];
+    for (const [x0, y0, x1, y1, c] of L) { P.line(x0, y0, x1, y1, c, 2); P.rect(x1, y1 + 2, 2, 1, hoof); }
+    P.line(5, 10, 2, 13, mane, 2); P.line(2, 13, 1, 18, mane, 2);
+    P.ell(13.5, 12.5, 9, 4, sh3(m, N, n)); P.ell(7.5, 12, 4, 4, sh3(m, N, n)); P.ell(19.5, 11.5, 3.6, 4.4, sh3(m, N, n));
+    P.poly([[17, 12], [19, 6], [21, 3], [24, 2], [25, 6], [23, 12]], N);
+    P.poly([[21, 2], [24, 0], [26, 1], [27, 5], [27, 7], [24, 7], [22, 5]], N); P.px(24, 3, INK); P.rect(25, 6, 2, 2, n);
+    P.line(24, 0, 26, -4, horn); P.line(25, 0, 27, -3, horn);
+    P.line(18, 10, 21, 2, mane, 2); P.px(17, 11, mane); P.px(20, 5, '#c8e0ff');
+    P.rect(10, 9, 7, 4, p.C); P.rect(10, 9, 7, 1, p.Y); P.rect(10, 12, 7, 1, p.c); P.px(13, 10, p.K);
+  } else if (st === 'tent') {
+    // циклоп с дубиной
+    const O = '#a08a6a', o = '#7a664c', Oh = '#bca480';
+    const lx = f === 0 ? [7, 14] : [6, 15];
+    P.rect(lx[0], 19, 4, 6, o); P.rect(lx[1], 19, 4, 6, O); P.rect(lx[0] - 1, 25, 5, 1, p.B); P.rect(lx[1], 25, 5, 1, p.B);
+    P.rect(2, 10, 4, 9, o); P.rect(2, 18, 4, 2, o);
+    P.ell(12, 14, 8, 6.5, sh3(Oh, O, o, -0.6, 0.6));
+    P.rect(5, 18, 14, 3, p.C); P.rect(5, 20, 14, 1, p.c); P.px(9, 19, p.K);
+    P.rect(8, 1, 9, 8, O); P.rect(9, 0, 7, 1, O); P.rect(8, 8, 9, 1, o);
+    P.ell(12.5, 4, 2.6, 2.2, '#ffffff'); P.rect(12, 3, 2, 2, '#c03a2a'); P.px(12, 3, INK); P.rect(9, 1, 7, 1, o);
+    P.rect(10, 7, 5, 1, INK); P.px(10, 8, BONE); P.px(14, 8, BONE);
+    P.rect(18, 9, 3, 8, O); P.rect(19, 16, 3, 2, O);
+    P.line(21, 16, 23, 2, p.D, 3); P.ell(23, 3, 2.6, 3.6, p.D); P.px(21, 1, BONE); P.px(25, 2, BONE);
+  } else {
+    // гигантский паук под седлом
+    const K = '#2e2236', k = '#1c1422', kh = '#4a3a58', E = '#ff4a3a';
+    const sh = f ? 1 : 0;
+    for (let i = 0; i < 4; i++) {
+      const bx = 9 + i * 3, up = (i + sh) % 2;
+      P.line(bx, 11, bx - 5, 6 + up, k, 1); P.line(bx - 5, 6 + up, bx - 8, 17, k, 1);
+      P.line(bx + 2, 11, bx + 8, 6 + (1 - up), K, 1); P.line(bx + 8, 6 + (1 - up), bx + 12, 17, K, 1);
+    }
+    P.ell(9, 10, 7, 5.5, sh3(kh, K, k)); P.px(7, 7, '#c03a2a'); P.px(9, 8, '#c03a2a'); P.px(8, 9, '#c03a2a');
+    P.ell(18, 11, 4.5, 4, sh3(kh, K, k));
+    P.px(20, 9, E); P.px(21, 10, E); P.px(19, 10, E); P.px(22, 12, BONE); P.px(21, 13, BONE);
+    P.rect(6, 3, 7, 3, p.C); P.rect(6, 5, 7, 1, p.c); P.px(9, 4, p.K); P.rect(8, 1, 3, 2, p.Y);
+  }
+}
+// ---------- дракон (46×34, три кадра крыльев) ----------
+const DRAGON_PAL = {
+  human:  { name: 'Золотой дракон',  D: '#d8a838', d: '#9c7424', h: '#f2d070', b: '#f2e2a8', w: '#b8862a', wl: '#e8c060', E: '#3a5f9e' },
+  orc:    { name: 'Красный дракон',  D: '#b8342a', d: '#7a1e18', h: '#e05a44', b: '#e8b07a', w: '#8a2a20', wl: '#d04a3a', E: '#ffd23a' },
+  goblin: { name: 'Зелёный дракон',  D: '#4f8a3a', d: '#2f5a24', h: '#7ab85a', b: '#c8d890', w: '#3a6a2c', wl: '#6aa84a', E: '#ff6a3a' },
+};
+function drawDragon(P, Q, f) {
+  const up = [0, 5, 10][f];
+  // дальнее крыло
+  P.poly([[18, 15], [14, 2 + up], [22, 0 + up], [30, 6 + up * 0.6], [26, 15]], Q.d);
+  // хвост
+  P.poly([[10, 18], [4, 20], [0, 17], [1, 21], [6, 24], [13, 21]], Q.D); P.poly([[0, 17], [-1, 13], [3, 16]], Q.d); P.px(0, 15, Q.h);
+  // задние лапы
+  P.rect(12, 21, 3, 6, Q.d); P.rect(11, 27, 5, 1, INK); P.rect(24, 22, 3, 5, Q.D); P.rect(24, 27, 5, 1, INK);
+  // тело
+  P.ell(19, 18, 10, 6, sh3(Q.h, Q.D, Q.d));
+  for (let x = 12; x < 28; x += 2) P.px(x, 23, Q.b);
+  P.ell(21, 21, 6, 2.5, Q.b);
+  for (let i = 0; i < 6; i++) P.poly([[11 + i * 3, 13 - (i % 2)], [12 + i * 3, 10 - (i % 2)], [13.5 + i * 3, 13]], Q.d);
+  // шея и голова
+  P.poly([[26, 16], [30, 9], [34, 6], [37, 8], [33, 13], [30, 19]], Q.D); P.line(31, 12, 33, 8, Q.b);
+  P.poly([[33, 5], [38, 3], [43, 5], [45, 8], [42, 10], [36, 10], [34, 8]], Q.D);
+  P.rect(39, 8, 6, 2, Q.d); P.px(44, 9, BONE); P.px(41, 10, BONE);
+  P.px(38, 5, Q.E); P.px(37, 5, INK); P.line(35, 4, 32, 0, Q.h); P.line(37, 3, 35, -1, Q.h); P.px(44, 7, INK);
+  // передние лапы
+  P.rect(28, 21, 2, 5, Q.D); P.rect(28, 26, 4, 1, INK);
+  // ближнее крыло
+  P.poly([[17, 16], [12, 3 + up], [21, 0 + up], [33, 5 + up * 0.6], [28, 16]], Q.w);
+  for (let i = 0; i < 4; i++) P.line(18 + i * 3, 15, 13 + i * 5, 3 + up + (i === 3 ? 2 : 0), Q.wl);
+  P.px(12, 3 + up, Q.h); P.px(21, up, Q.h);
+}
+
+// ---------- жилище уникального существа (48×34) ----------
+function paintUniqHome(P, w, h, p, st) {
+  if (st === 'house') {
+    // конюшня единорогов под старым дубом
+    P.ell(10, 10, 10, 9, (x, y, nx, ny) => ny < -0.3 ? '#6a9a4a' : ny > 0.5 ? '#3a5a2a' : '#4f7a38'); P.rect(9, 16, 3, h - 16, '#5a3820');
+    brick(P, 14, 14, 30, h - 14, 33); P.poly([[12, 15], [29, 4], [46, 15]], p.R); P.rect(12, 14, 34, 1, p.r);
+    P.rect(22, 20, 12, h - 20, '#1a120c'); P.rect(22, 20, 12, 1, '#3b2a20'); P.rect(27, 20, 1, h - 20, '#5a3820');
+    P.rect(24, 24, 3, 5, '#ece8e0'); P.px(25, 23, '#f2c14e');
+    for (let x = 0; x < w; x += 4) P.rect(x, h - 7, 1, 7, BONE); P.rect(0, h - 6, w, 1, BONE); P.rect(0, h - 3, w, 1, BONE);
+    flag(P, 29, 0, p, 3);
+  } else if (st === 'tent') {
+    // пещера циклопов в скале
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const nx = (x + 0.5 - w / 2) / (w / 2), ny = (h - y - 0.5) / h; if (nx * nx + ny * ny * 1.1 <= 1) P.px(x, y, (x * 7 + y * 3) % 13 === 0 ? STONE3 : ny > 0.7 ? STONE2 : nx > 0.4 ? STONE3 : STONE); }
+    P.ell(w / 2, h - 1, 10, 15, '#0a0806'); P.rect(w / 2 - 3, h - 12, 6, 3, '#ffffff'); P.rect(w / 2 - 1, h - 12, 2, 3, '#c03a2a');
+    P.line(w / 2 - 12, h - 1, w / 2 - 8, h - 14, BONE, 2); P.line(w / 2 + 12, h - 1, w / 2 + 8, h - 14, BONE, 2);
+    P.rect(4, h - 3, 6, 2, BONE); P.rect(w - 9, h - 2, 5, 1, BONE);
+    flag(P, w - 8, 0, p, 3);
+  } else {
+    // паучье гнездо в холме, затянутое паутиной
+    for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) { const nx = (x + 0.5 - w / 2) / (w / 2), ny = (h - y - 0.5) / h; if (nx * nx + ny * ny <= 1) P.px(x, y, ny > 0.75 ? ((x + y) % 4 ? p.R : p.r) : ((x * 5 + y) % 9 === 0 ? STONE : p.L)); }
+    P.ell(w / 2, h - 1, 9, 12, '#0a0806');
+    const web = '#e4e4ec';
+    for (const a of [-1.3, -0.7, 0, 0.7, 1.3]) P.line(w / 2, h - 7, w / 2 + Math.sin(a) * 14, h - 7 - Math.cos(a) * 14, web);
+    for (const r of [5, 9]) for (let a = -1.4; a <= 1.4; a += 0.35) P.px(w / 2 + Math.sin(a) * r, h - 7 - Math.cos(a) * r, web);
+    P.px(w / 2 - 2, h - 4, '#ff4a3a'); P.px(w / 2 + 1, h - 4, '#ff4a3a'); P.px(w / 2 + 3, h - 5, '#ff4a3a');
+    flag(P, w / 2, 0, p, 5);
+  }
+}
+
+
+// ---------- сундук (16×13) ----------
+function paintChest(P, open) {
+  const wd = '#8a5a30', wdD = '#5e3a1c', wdL = '#a8763e', iron = '#5a5a58', ironL = '#8a8a86', gold = '#f2c14e';
+  P.rect(1, 6, 14, 7, wd); P.rect(1, 6, 14, 1, wdL); P.rect(1, 12, 14, 1, wdD);
+  for (const x of [1, 14]) P.rect(x, 6, 1, 7, iron); P.rect(7, 6, 2, 7, iron); P.px(7, 8, ironL);
+  P.rect(7, 8, 2, 2, gold); P.px(8, 9, '#a86a22');
+  if (!open) {
+    P.rect(1, 1, 14, 5, wd); P.rect(2, 0, 12, 1, wdL); P.rect(1, 1, 14, 1, wdL); P.rect(1, 5, 14, 1, wdD);
+    for (const x of [1, 14]) P.rect(x, 1, 1, 5, iron); P.rect(7, 1, 2, 5, iron); P.px(7, 2, ironL);
+  } else {
+    P.rect(1, 0, 14, 3, wdD); P.rect(2, 0, 12, 1, wd); P.rect(7, 0, 2, 3, iron);
+    P.rect(2, 4, 12, 2, gold); P.px(4, 4, '#fff1b0'); P.px(10, 3, gold); P.px(11, 4, '#fff1b0'); P.px(6, 3, gold);
+  }
+}
+// ---------- сани Санты с оленями (54×22) ----------
+function drawSanta(P, f) {
+  const deer = '#8a5a34', deerD = '#5e3a1c', antler = '#d8c8a0', red = '#c02a2a', redD = '#8a1a1a', fur = '#f4f0e8', skin = '#f0c0a0', gold = '#f2c14e';
+  // олени: два, впереди саней
+  for (const [ox, ph] of [[34, 0], [44, 1]]) {
+    const st = (f + ph) % 2;
+    P.ell(ox + 4, 11, 5, 2.6, deer); P.rect(ox + 8, 6, 2, 5, deer); P.rect(ox + 8, 5, 4, 3, deer); P.px(ox + 11, 6, '#c02a2a');
+    P.line(ox + 8, 5, ox + 7, 1, antler); P.line(ox + 7, 2, ox + 5, 1, antler); P.line(ox + 10, 5, ox + 11, 1, antler); P.px(ox + 12, 1, antler);
+    const L = st ? [[1, 4], [3, 2], [6, 4], [8, 2]] : [[0, 3], [3, 3], [6, 3], [9, 3]];
+    for (const [lx, ll] of L) P.rect(ox + lx, 13, 1, ll, deerD);
+    P.px(ox - 1, 10, fur);
+  }
+  // упряжь
+  P.line(24, 12, 36, 11, gold); P.line(36, 11, 46, 11, gold);
+  // сани
+  P.poly([[2, 9], [26, 9], [24, 16], [6, 16]], red); P.rect(2, 9, 24, 1, gold); P.rect(6, 15, 18, 1, redD);
+  P.line(4, 18, 26, 18, gold); P.line(26, 18, 29, 15, gold); P.line(8, 16, 8, 18, gold); P.line(20, 16, 20, 18, gold);
+  // мешок с подарками
+  P.ell(6, 7, 4, 4, '#7a5a34'); P.px(6, 3, '#5e3a1c'); P.rect(4, 6, 2, 2, '#4a8a3a'); P.rect(7, 5, 2, 2, '#3a5f9e');
+  // Санта
+  P.rect(13, 3, 7, 7, red); P.rect(13, 8, 7, 1, fur); P.rect(15, 4, 1, 4, fur);
+  P.rect(14, 0, 5, 4, skin); P.rect(13, 2, 7, 3, fur); P.px(17, 1, INK); P.px(19, 1, '#e08070');
+  P.rect(13, -2, 6, 2, red); P.rect(14, -3, 4, 1, red); P.rect(13, -4, 3, 1, red); P.rect(12, -5, 2, 2, fur); P.rect(13, 0, 6, 1, fur);
+  P.line(20, 5, 24, 9, red);
+}
+
+
+// ---------- новые детали окружения: пень, бревно, папоротник, грибы (по сезонам) ----------
+const SEAS_GREEN = ['#5a8a3a', '#4f7a30', '#b8862a', '#e8eef0'], SEAS_GREEN2 = ['#3e6a28', '#355a20', '#8a5a1e', '#c9d8de'];
+function paintStump(P, s) {
+  const bark = '#5e4028', barkD = '#3e2a18', ring = '#c8a878', ringD = '#9c7c52';
+  P.rect(2, 5, 10, 7, bark); P.rect(2, 5, 1, 7, barkD); P.rect(8, 6, 1, 6, barkD); P.rect(0, 10, 3, 2, bark); P.rect(11, 10, 3, 2, bark);
+  P.ell(7, 5, 5, 1.6, ring); P.ell(7, 5, 3, 0.9, ringD); P.px(7, 5, ring);
+  if (s === 3) { P.ell(7, 4, 5.4, 1.6, SNOW); P.px(3, 9, SNOW); }
+  else { P.px(4, 9, SEAS_GREEN[s]); P.px(3, 8, SEAS_GREEN[s]); P.px(10, 7, SEAS_GREEN2[s]); }
+}
+function paintLog(P, s) {
+  const bark = '#6a4a2e', barkD = '#46301c', barkL = '#84603c', end = '#c8a878';
+  P.rect(2, 3, 22, 6, bark); P.rect(2, 3, 22, 1, barkL); P.rect(2, 8, 22, 1, barkD);
+  for (let x = 5; x < 22; x += 5) P.rect(x, 4, 1, 3, barkD);
+  P.ell(2.5, 6, 2.5, 3, end); P.ell(2.5, 6, 1.2, 1.5, '#9c7c52');
+  P.line(20, 3, 23, 0, barkD); P.px(23, 0, SEAS_GREEN[s]);
+  if (s === 3) { P.rect(3, 2, 21, 2, SNOW); P.px(1, 3, SNOW); }
+  else if (s < 2) { P.px(9, 3, '#e8e0c0'); P.px(10, 2, '#c03a2a'); P.px(11, 3, '#e8e0c0'); P.rect(14, 2, 3, 1, SEAS_GREEN[s]); }
+}
+function paintFern(P, s) {
+  const g = SEAS_GREEN[s], g2 = SEAS_GREEN2[s];
+  if (s === 3) { P.ell(7, 9, 6, 2.5, SNOW); P.line(4, 9, 2, 5, g2); P.line(10, 9, 12, 6, g2); return; }
+  for (const [x1, y1, c] of [[1, 4, g2], [4, 1, g], [7, 0, g], [10, 1, g], [13, 4, g2]]) {
+    P.line(7, 10, x1, y1, c);
+    const mx = (7 + x1) / 2, my = (10 + y1) / 2; P.px(mx - 1, my, c); P.px(mx + 1, my, c);
+  }
+}
+function paintShrooms(P, s) {
+  if (s === 3) { P.ell(5, 6, 5, 1.5, SNOW); return; }
+  const cap = s === 2 ? '#a0522d' : '#c03a2a', stem = '#e8e0c8';
+  for (const [x, h, r] of [[2, 3, 2], [6, 5, 3], [10, 2, 2]]) {
+    P.rect(x, 7 - h, 1, h, stem); P.ell(x + 0.5, 7 - h, r, 1.4, cap); P.px(x, 7 - h - 1, '#f4f0e8');
+  }
+}
+
+function buildNewTextures(scene) {
+  glowTex(scene, 'glow_fire', '255,170,70', 0.5);
+  const mons = [['wgob', 12, 16, drawWGob], ['hob', 19, 21, drawHob], ['warg', 27, 23, drawWarg], ['gnome', 12, 16, drawGnome], ['dwarf', 19, 21, drawDwarf], ['golem', 22, 26, drawGolem]];
+  for (const [key, w, h, fn] of mons) {
+    paintTex(scene, key + '_A', w, h, P => fn(P, 0)); paintTex(scene, key + '_B', w, h, P => fn(P, 1));
+    silhouette(scene, key + '_A', key + '_X', '#ffffff');
+  }
+  paintTex(scene, 'den_gob', 64, 48, P => paintCamp(P, 64, 48, 33));
+  paintTex(scene, 'den_gnome', 64, 48, P => paintMine(P, 64, 48, 44));
+  for (let se = 0; se < 4; se++) {
+    paintTex(scene, 'stump@' + se, 14, 12, P => paintStump(P, se));
+    paintTex(scene, 'log@' + se, 25, 10, P => paintLog(P, se));
+    paintTex(scene, 'fern@' + se, 15, 11, P => paintFern(P, se));
+    paintTex(scene, 'shrooms@' + se, 13, 8, P => paintShrooms(P, se));
+  }
+  paintTex(scene, 'chest', 16, 13, P => paintChest(P, false)); paintTex(scene, 'chest_open', 16, 13, P => paintChest(P, true));
+  ['A', 'B'].forEach((fr, i) => paintTex(scene, 'santa_' + fr, 56, 26, P => { P.ctx.save(); P.ctx.translate(1, 5); drawSanta(P, i); P.ctx.restore(); }));
+  paintTex(scene, 'gift', 9, 9, P => { P.rect(0, 2, 9, 7, '#c02a2a'); P.rect(0, 2, 9, 1, '#e04a4a'); P.rect(4, 2, 1, 7, '#f2c14e'); P.rect(0, 5, 9, 1, '#f2c14e'); P.line(4, 2, 2, 0, '#f2c14e'); P.line(4, 2, 6, 0, '#f2c14e'); });
+  paintTex(scene, 'fireball', 8, 6, P => { P.ell(4, 3, 4, 3, '#ff7a2a'); P.ell(5, 3, 2.4, 1.8, '#ffd23a'); P.px(6, 3, '#fff1b0'); });
+  for (const k in RACES) {
+    const p = RACES[k].pal, st = RACES[k].style;
+    const off = { house: 5, tent: 3, mound: 11 }[st];
+    ['A', 'B'].forEach((fr, i) => paintTex(scene, `unq_${fr}_${k}`, 28, 29, P => { P.ctx.save(); P.ctx.translate(0, off); drawUniq(P, p, st, i); P.ctx.restore(); }));
+    silhouette(scene, `unq_A_${k}`, `unq_X_${k}`, '#e03a3a');
+    const Q = DRAGON_PAL[k];
+    ['A', 'B', 'C'].forEach((fr, i) => paintTex(scene, `drg_${fr}_${k}`, 46, 30, P => { P.ctx.save(); P.ctx.translate(0, 2); drawDragon(P, Q, i); P.ctx.restore(); }));
+    silhouette(scene, `drg_A_${k}`, `drg_X_${k}`, '#e03a3a');
+    paintTex(scene, 'uniqhome_' + k, 48, 34, P => paintUniqHome(P, 48, 34, p, st));
+  }
 }
 
 // ================== ПИКСЕЛЬ-АРТ: ПОСТРОЙКИ ==================
@@ -1067,6 +1423,13 @@ function paintWall(P, w, h, p, lvl) {
     P.rect(0, 9, 14, 1, p.B); P.rect(0, 18, 14, 1, p.B);
     for (let x = 1; x < 13; x += 2) { P.px(x, 10, p.K); P.px(x, 19, p.K); }
     P.line(13, 10, 13, h, p.D); P.px(0, h - 1, p.D);
+  } else if (lvl === 3) {
+    // высокая стена с боевым ходом: по верху ходит стрелок
+    brick(P, 0, 10, w, h - 10, 53);
+    crenels(P, 0, 10, w); P.rect(0, 10, w, 1, STONE2); P.rect(0, 12, w, 1, STONE3);
+    P.rect(8, 15, 2, 4, '#1a120c'); P.px(8, 15, STONE3);
+    P.rect(5, 20, 8, 12, p.C); P.rect(5, 31, 8, 1, p.c); P.rect(8, 24, 2, 2, p.K); P.rect(4, 19, 10, 1, p.D);
+    flag(P, w - 2, 0, p, 1);
   } else {
     brick(P, 0, 4, w, h - 4, 41);
     crenels(P, 0, 4, w); P.rect(0, 4, w, 1, STONE2);
@@ -1237,6 +1600,16 @@ function buildBuildingTextures(scene) {
     paintTex(scene, 'dwell3_' + k, 62, 40, P => paintDwell(P, 62, 40, p, st, 3));
     paintTex(scene, 'wall1_' + k, 14, 25, P => paintWall(P, 14, 25, p, 1));
     paintTex(scene, 'wall2_' + k, 16, 29, P => paintWall(P, 16, 29, p, 2));
+    paintTex(scene, 'wall3_' + k, 18, 32, P => paintWall(P, 18, 32, p, 3));
+    paintTex(scene, 'lodge_' + k, 37, 25, P => paintHut(P, 37, 25));
+    paintTex(scene, 'taxdesk_' + k, 24, 20, P => {
+      P.rect(1, 1, 1, 19, '#5a3820'); P.rect(22, 1, 1, 19, '#5a3820');
+      for (let x = 0; x < 24; x += 3) P.rect(x, 0, 3, 4, (x / 3) % 2 ? p.C : '#e8dcc0');
+      P.rect(0, 4, 24, 1, p.c); for (let x = 1; x < 24; x += 3) P.px(x, 5, p.c);
+      P.rect(2, 11, 20, 2, '#9c845a'); P.rect(2, 11, 20, 1, '#b8a070'); P.rect(3, 13, 2, 7, '#5a3820'); P.rect(19, 13, 2, 7, '#5a3820'); P.rect(5, 15, 14, 1, '#5a3820');
+      P.rect(5, 9, 6, 2, '#e8dcc0'); P.px(6, 9, INK); P.px(8, 10, INK); P.px(9, 9, INK);
+      P.rect(14, 8, 3, 3, '#f2c14e'); P.px(14, 8, '#fff1b0'); P.rect(17, 9, 2, 2, '#d8a838'); P.px(15, 7, '#f2c14e');
+    });
     paintTex(scene, 'forge1_' + k, 48, 36, P => paintForge(P, 48, 36, p, st, 1));
     paintTex(scene, 'forge2_' + k, 67, 41, P => paintForge(P, 67, 41, p, st, 2));
     paintTex(scene, 'guild1_' + k, 34, 55, P => paintGuild(P, 34, 55, p, st, 1));
@@ -1454,6 +1827,9 @@ function buildNatureTextures(scene) {
 // ================== МУЗЫКА И ЗВУКИ ==================
 // Всё играется синтезатором браузера. Тема одна и та же, но каждый круг
 // (32 шага) получает новую аранжировку: от народа, сезона и случая.
+// Настройки игрока: музыка вкл/выкл, громкость музыки и звуков, последняя сложность
+const SETTINGS = (() => { const d = { music: true, musVol: 0.8, sfxVol: 0.8, diff: 'normal' }; try { Object.assign(d, JSON.parse(localStorage.getItem('hok_settings') || '{}')); } catch (e) {} return d; })();
+function saveSettings() { try { localStorage.setItem('hok_settings', JSON.stringify(SETTINGS)); } catch (e) {} }
 const midi = m => 440 * Math.pow(2, (m - 69) / 12);
 const pick = a => a[Math.floor(Math.random() * a.length)];
 const THEMES = {
@@ -1485,14 +1861,14 @@ const ARPS = [[0, 1, 2, 3, 2, 1, 2, 1], [3, 2, 1, 0, 1, 2, 1, 2], [0, 2, 1, 3, 0
 const ARPS_SPARSE = [[0, -1, 2, -1, 3, -1, 2, -1], [0, -1, -1, 2, -1, -1, 3, -1]];
 
 class Music {
-  constructor() { this.ctx = null; this.muted = false; this.mode = 'day'; this.race = 'human'; this.season = 0; this.step = 0; this.arr = null; }
+  constructor() { this.ctx = null; this.muted = !SETTINGS.music; this.mode = 'day'; this.race = 'human'; this.season = 0; this.step = 0; this.arr = null; }
   start() {
     const AC = window.AudioContext || window.webkitAudioContext; if (!AC) return;
     if (!this.ctx) {
       const ctx = this.ctx = new AC();
-      this.master = ctx.createGain(); this.master.gain.value = this.muted ? 0 : 0.5; this.master.connect(ctx.destination);
-      this.musicBus = ctx.createGain(); this.musicBus.gain.value = 0.55; this.musicBus.connect(this.master);
-      this.sfxBus = ctx.createGain(); this.sfxBus.gain.value = 0.7; this.sfxBus.connect(this.master);
+      this.master = ctx.createGain(); this.master.gain.value = 0.5; this.master.connect(ctx.destination);
+      this.musicBus = ctx.createGain(); this.musicBus.gain.value = this.muted ? 0 : 0.55 * SETTINGS.musVol; this.musicBus.connect(this.master);
+      this.sfxBus = ctx.createGain(); this.sfxBus.gain.value = 0.7 * SETTINGS.sfxVol; this.sfxBus.connect(this.master);
       const len = Math.floor(ctx.sampleRate * 2.4), ir = ctx.createBuffer(2, len, ctx.sampleRate);
       for (let ch = 0; ch < 2; ch++) { const d = ir.getChannelData(ch); for (let i = 0; i < len; i++) d[i] = (Math.random() * 2 - 1) * Math.pow(1 - i / len, 2.4); }
       this.rev = ctx.createConvolver(); this.rev.buffer = ir;
@@ -1509,8 +1885,7 @@ class Music {
   setRace(r) { if (this.race !== r) { this.race = r; this.arr = null; } }
   setSeason(s) { if (this.season !== s) { this.season = s; this.arr = null; } }
   toggle() {
-    this.muted = !this.muted;
-    if (this.master) this.master.gain.setTargetAtTime(this.muted ? 0 : 0.5, this.ctx.currentTime, 0.05);
+    this.muted = !this.muted; SETTINGS.music = !this.muted; saveSettings(); this.applyVol();
     return !this.muted;
   }
   arrange() {
@@ -1647,6 +2022,7 @@ class Music {
     else if (name === 'meteor') { this.noise(t, 1.4, 0.25, 2500, null, 'bandpass'); this.voice('sawtooth', 900, t, 1.4, 0.03, { ...B, slide: 120, filter: 1500 }); }
     else if (name === 'quake') { this.noise(t, 2.2, 0.5, 160); this.voice('sine', 40, t, 2.2, 0.35, { ...B, slide: 28 }); }
     else if (name === 'doom') { [50, 49, 47, 43].forEach((n, i) => this.voice('sawtooth', midi(n), t + i * 0.6, 1.4, 0.07, { filter: 600, dest: this.sfxBus, send: 0.7 })); this.noise(t, 3, 0.3, 200); }
+    else if (name === 'bells') { for (let i = 0; i < 8; i++) { this.voice('triangle', [2093, 2349, 2637][i % 3], t + i * 0.11, 0.25, 0.035, { ...B, filter: 6000 }); this.voice('sine', 4186, t + i * 0.11, 0.12, 0.015, B); } }
     else if (name === 'victory') { [62, 66, 69, 74, 69, 74].forEach((n, i) => this.voice('square', midi(n), t + i * 0.18, 0.4, 0.05, { dest: this.sfxBus, filter: 3000, send: 0.5 })); }
   }
 }
@@ -1657,7 +2033,7 @@ Music.prototype.setRain = function (kind) {
   if (!this.rain) {
     const src = this.ctx.createBufferSource(); src.buffer = this.nbuf; src.loop = true;
     const f = this.ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1800; f.Q.value = 0.4;
-    const g = this.ctx.createGain(); g.gain.value = 0; src.connect(f); f.connect(g); g.connect(this.master); src.start();
+    const g = this.ctx.createGain(); g.gain.value = 0; src.connect(f); f.connect(g); g.connect(this.sfxBus); src.start();
     this.rain = { g, f };
   }
   this.rain.f.frequency.setTargetAtTime(kind === 'snow' ? 700 : 1800, this.ctx.currentTime, 0.3);
@@ -1665,49 +2041,339 @@ Music.prototype.setRain = function (kind) {
 };
 const music = new Music();
 
-// ================== ЭКРАН ВЫБОРА НАРОДА ==================
+Music.prototype.applyVol = function () {
+  if (!this.ctx) return;
+  const t = this.ctx.currentTime;
+  this.musicBus.gain.setTargetAtTime(this.muted ? 0 : 0.55 * SETTINGS.musVol, t, 0.05);
+  this.sfxBus.gain.setTargetAtTime(0.7 * SETTINGS.sfxVol, t, 0.05);
+};
+Music.prototype.setMusicOn = function (on) { this.muted = !on; SETTINGS.music = on; saveSettings(); this.applyVol(); };
+
+// ================== МЕНЮ: ТИТУЛ, ВЫБОР НАРОДА И СЛОЖНОСТИ, КАК ИГРАТЬ, НАСТРОЙКИ ==================
 function buildAllTextures(scene) {
   buildCharTextures(scene);
   buildBuildingTextures(scene);
   buildNatureTextures(scene);
+  buildNewTextures(scene);
 }
+const GAME_VERSION = 'v0.10';
+// Сложность: lazy — логова выпускают волны через ночь; dmg — урон чудовищ и вражеских воинов; raid — размер набегов
+const DIFFS = {
+  easy:   { name: 'Лёгкая',  lazy: true,  dmg: 0.75, raid: 1,    desc: 'логова нападают через ночь, враги бьют на четверть слабее' },
+  normal: { name: 'Обычная', lazy: false, dmg: 1,    raid: 1,    desc: 'задуманный баланс' },
+  hard:   { name: 'Сложная', lazy: false, dmg: 1.25, raid: 1.25, desc: 'враги бьют на четверть сильнее, набеги на четверть больше' },
+};
+const DIFF_KEYS = ['easy', 'normal', 'hard'];
+
+// ---------- общие элементы меню ----------
+function menuButton(scene, x, y, label, fn, w = 320, h = 56, size = 26) {
+  const r = scene.add.rectangle(x, y, w, h, 0x000000, 0.45).setStrokeStyle(2, 0xefe3c2, 0.35).setInteractive({ useHandCursor: true });
+  const t = scene.add.text(x, y, label, { ...TXT, fontSize: size + 'px' }).setOrigin(0.5);
+  const b = { r, t, fn, on: false, set(on) { this.on = on; r.setStrokeStyle(on ? 3 : 2, on ? 0xf2c14e : 0xefe3c2, on ? 1 : 0.35); t.setColor(on ? '#f2c14e' : '#efe3c2'); },
+    destroy() { r.destroy(); t.destroy(); } };
+  r.on('pointerdown', () => { music.start(); music.sfx('pay'); fn(); });
+  return b;
+}
+// ---------- экран: полный экран и размер окна (в exe — через Neutralino) ----------
+const IS_EXE = !!window.HOK_EXE && typeof Neutralino !== 'undefined';
+const WIN_SIZES = [[1280, 720], [1600, 900], [1920, 1080], [2560, 1440]];
+const Screen = {
+  init() {
+    if (!IS_EXE) return;
+    try { Neutralino.init(); this.ok = true; Neutralino.events.on('ready', () => this.apply()); } catch (e) { this.ok = false; }
+  },
+  async apply() {
+    if (!IS_EXE) return;
+    try {
+      if (SETTINGS.full) await Neutralino.window.setFullScreen();
+      else {
+        try { await Neutralino.window.exitFullScreen(); } catch (e) {}
+        const [w, h] = WIN_SIZES[SETTINGS.win || 0] || WIN_SIZES[0];
+        await Neutralino.window.setSize({ width: w, height: h });
+        if (Neutralino.window.center) await Neutralino.window.center();
+      }
+    } catch (e) {}
+  },
+  isFull() { return IS_EXE ? !!SETTINGS.full : !!document.fullscreenElement; },
+  setFull(on) {
+    SETTINGS.full = on; saveSettings();
+    if (IS_EXE && this.ok) { this.apply(); return; }
+    try { if (on && !document.fullscreenElement) document.documentElement.requestFullscreen(); else if (!on && document.fullscreenElement) document.exitFullscreen(); } catch (e) {}
+  },
+  setWin(i) { SETTINGS.win = (i + WIN_SIZES.length) % WIN_SIZES.length; SETTINGS.full = false; saveSettings(); this.apply(); },
+  exit() { try { Neutralino.app.exit(); } catch (e) { try { window.close(); } catch (e2) {} } },
+};
+Screen.init();
+
+// Окно настроек: музыка, громкость музыки и звуков, полный экран, в exe ещё размер окна.
+// Работает и в меню, и в паузе. Клавиши: ↑↓ выбрать строку, ←→ изменить, Пробел переключить.
+function settingsUI(scene, cx, cy, depth = 0, box = null, onChange) {
+  const objs = [], add = o => { if (box) box.add(o); else o.setDepth(depth); objs.push(o); return o; };
+  const rows = [], n = IS_EXE ? 5 : 4, step = 60;
+  const lx = cx - 300, sx = cx - 40, sw = 280;
+  let y = cy - (n - 1) * step / 2;
+  const label = (yy, t) => add(scene.add.text(lx, yy, t, { ...TXT, fontSize: '24px' }).setOrigin(0, 0.5));
+  // кнопка-значение: щелчок или ←→ меняют
+  const choice = (title, text, onLeft, onRight) => {
+    const yy = y; y += step;
+    const l = label(yy, title);
+    const r = add(scene.add.rectangle(sx + 110, yy, 220, 44, 0x000000, 0.45).setStrokeStyle(2, 0xf2c14e, 0.8).setInteractive({ useHandCursor: true }));
+    const t = add(scene.add.text(sx + 110, yy, '', { ...TXT, fontSize: '24px' }).setOrigin(0.5));
+    const sync = () => { const [v, on] = text(); t.setText(v).setColor(on ? '#f2c14e' : '#b9ad8f'); };
+    const L = () => { music.start(); onLeft(); sync(); onChange && onChange(); }, Rt = () => { music.start(); (onRight || onLeft)(); sync(); onChange && onChange(); };
+    r.on('pointerdown', Rt); sync();
+    rows.push({ l, left: L, right: Rt, enter: Rt, sync });
+  };
+  const slider = (title, key, after) => {
+    const yy = y; y += step;
+    const l = label(yy, title);
+    add(scene.add.rectangle(sx, yy, sw, 10, 0x141d21, 0.9).setOrigin(0, 0.5).setStrokeStyle(2, 0xefe3c2, 0.4));
+    const fill = add(scene.add.rectangle(sx, yy, 1, 10, 0xf2c14e).setOrigin(0, 0.5));
+    const knob = add(scene.add.rectangle(sx, yy, 16, 30, 0xefe3c2).setStrokeStyle(2, 0x141d21));
+    const pct = add(scene.add.text(sx + sw + 24, yy, '', { ...TXT, fontSize: '22px' }).setOrigin(0, 0.5));
+    const hit = add(scene.add.rectangle(sx - 12, yy, sw + 24, 40, 0x000000, 0.001).setOrigin(0, 0.5).setInteractive({ useHandCursor: true }));
+    const upd = () => { const v = SETTINGS[key]; fill.width = Math.max(1, sw * v); knob.x = (sx + sw * v) * (box ? UI : 1); pct.setText(Math.round(v * 100) + '%'); };
+    const setV = v => { SETTINGS[key] = Phaser.Math.Clamp(Math.round(v * 20) / 20, 0, 1); music.applyVol(); upd(); };
+    let drag = false;
+    const at = ptr => setV((ptr.x / UI - sx) / sw);
+    hit.on('pointerdown', ptr => { music.start(); drag = true; at(ptr); });
+    const mv = ptr => { if (drag && ptr.isDown) at(ptr); };
+    const up = () => { if (drag) { drag = false; saveSettings(); after && after(); } };
+    scene.input.on('pointermove', mv); scene.input.on('pointerup', up);
+    upd();
+    rows.push({ l, left: () => { setV(SETTINGS[key] - 0.1); saveSettings(); after && after(); }, right: () => { setV(SETTINGS[key] + 0.1); saveSettings(); after && after(); }, off: () => { scene.input.off('pointermove', mv); scene.input.off('pointerup', up); } });
+  };
+  choice('Музыка', () => [music.muted ? 'выкл' : 'вкл', !music.muted], () => music.setMusicOn(music.muted));
+  slider('Громкость музыки', 'musVol');
+  slider('Громкость звуков', 'sfxVol', () => music.sfx('coin'));
+  choice('Полный экран', () => [Screen.isFull() ? 'вкл' : 'выкл', Screen.isFull()], () => Screen.setFull(!Screen.isFull()));
+  if (IS_EXE) choice('Размер окна', () => { const [w, h] = WIN_SIZES[SETTINGS.win || 0]; return [`${w}×${h}`, !SETTINGS.full]; }, () => Screen.setWin((SETTINGS.win || 0) - 1), () => Screen.setWin((SETTINGS.win || 0) + 1));
+  // браузер сам выходит из полного экрана по Esc — обновляем надписи
+  const onFs = () => rows.forEach(r => r.sync && r.sync());
+  document.addEventListener('fullscreenchange', onFs);
+  let sel = 0;
+  const hl = () => rows.forEach((r, i) => r.l.setColor(i === sel ? '#f2c14e' : '#efe3c2'));
+  hl();
+  const onKey = ev => {
+    const k = ev.code;
+    if (k === 'ArrowUp' || k === 'KeyW') { sel = (sel + rows.length - 1) % rows.length; hl(); }
+    else if (k === 'ArrowDown' || k === 'KeyS') { sel = (sel + 1) % rows.length; hl(); }
+    else if (k === 'ArrowLeft' || k === 'KeyA') rows[sel].left();
+    else if (k === 'ArrowRight' || k === 'KeyD') rows[sel].right();
+    else if ((k === 'Space') && rows[sel].enter) rows[sel].enter();
+  };
+  scene.input.keyboard.on('keydown', onKey);
+  return { objs, destroy() { scene.input.keyboard.off('keydown', onKey); document.removeEventListener('fullscreenchange', onFs); rows.forEach(r => r.off && r.off()); objs.forEach(o => o.destroy()); } };
+}
+// Небо в сумерках, звёзды, лес и земля — общий фон экранов меню
+function menuBackdrop(scene, dusk = true) {
+  const g = scene.add.graphics();
+  const top = Phaser.Display.Color.HexStringToColor(dusk ? '#16213a' : '#22333b'), bot = Phaser.Display.Color.HexStringToColor(dusk ? '#b8664a' : '#3a5560');
+  for (let i = 0; i < 24; i++) { const c = Phaser.Display.Color.Interpolate.ColorWithColor(top, bot, 23, i); g.fillStyle(Phaser.Display.Color.GetColor(c.r, c.g, c.b), 1).fillRect(0, i * 20, UW, 20); }
+  const R0 = rng(99), stars = [];
+  for (let i = 0; i < 70; i++) stars.push(scene.add.rectangle(R0() * UW, R0() * 280, 2, 2, 0xffffff, 0.3 + R0() * 0.6));
+  scene.add.image(UW - 70, 56, 'moon').setScale(2.5).setAlpha(0.95);
+  const gy = UGROUND;
+  for (let x = 10; x < UW + 40; x += 46) scene.add.image(x + 13, gy + 4, (x / 46) % 2 ? 'pine_far@1' : 'tree_far_1@1').setOrigin(0.5, 1).setScale(3).setAlpha(0.55);
+  scene.add.rectangle(0, 0, UW, gy, 0x16213a, 0.18).setOrigin(0);
+  scene.add.tileSprite(0, gy, UW, UBANK - UGROUND + 3, 'ground@1').setOrigin(0);
+  scene.add.rectangle(0, gy + UBANK - UGROUND + 3, UW, UH, 0x1b3040).setOrigin(0);
+  const waves = [];
+  for (let i = 0; i < 14; i++) waves.push(scene.add.rectangle(R0() * UW, UBANK + 20 + R0() * (UH - UBANK - 30), 20 + R0() * 60, 2, 0xcfe0ea, 0.18));
+  return { stars, waves };
+}
+function twinkle(scene, bd, time) {
+  bd.stars.forEach((s, i) => s.setAlpha(0.35 + 0.35 * Math.sin(time / 600 + i * 1.7)));
+  bd.waves.forEach((w, i) => { w.x += Math.sin(time / 900 + i) * 0.15; w.setAlpha(0.1 + 0.1 * Math.sin(time / 700 + i * 2.3)); });
+}
+
+// ---------- титул: живая заставка ----------
+class TitleScene extends Phaser.Scene {
+  constructor() { super('title'); }
+  create() {
+    buildAllTextures(this);
+    this.cameras.main.setBackgroundColor('#16213a').setOrigin(0, 0).setZoom(UI).fadeIn(400);
+    this.bd = menuBackdrop(this);
+    this.raceI = 0;
+    const rk = 'human';
+    this.castle = this.add.image(UW - 230, UGROUND + 3, 'hall3_' + rk).setOrigin(0.5, 1).setScale(3);
+    this.wallL = this.add.image(UW - 400, UGROUND + 3, 'wall2_' + rk).setOrigin(0.5, 1).setScale(3);
+    this.glow = this.add.image(UW - 230, UGROUND - 90, 'glow').setScale(3).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.5);
+    this.fire = this.add.image(UW - 470, UGROUND + 1, 'fire_0').setOrigin(0.5, 1).setScale(3);
+    this.fireGlow = this.add.image(UW - 470, UGROUND - 20, 'glow').setScale(1.8).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0.6);
+    this.mon = this.add.sprite(-80, UGROUND, 'mon_A_' + rk).setOrigin(0.5, 1).setScale(3);
+    this.escort = [this.add.sprite(-160, UGROUND, 'mel_A_' + rk).setOrigin(0.5, 1).setScale(3), this.add.sprite(-220, UGROUND, 'rng_A_' + rk).setOrigin(0.5, 1).setScale(3)];
+    this.flies = [];
+    for (let i = 0; i < 14; i++) this.flies.push({ o: this.add.rectangle(0, 0, 3, 3, 0xfff1a0), x: Math.random() * UW, y: 300 + Math.random() * 150, ph: Math.random() * 9 });
+    this.add.text(UW / 2, 108, 'Heroes of Kingdoms', { ...TXT, fontSize: '68px', color: '#f2c14e', strokeThickness: 8 }).setOrigin(0.5);
+    this.add.text(UW / 2, 166, 'Построй королевство, отбейся от чудовищ, сокруши врага', { ...TXT, fontSize: '21px', color: '#efe3c2' }).setOrigin(0.5);
+    const items = [['Играть', () => this.go('select')], ['Как играть', () => this.go('how')], ['Настройки', () => this.go('settings')]].concat(IS_EXE ? [['Выход', () => Screen.exit()]] : []);
+    this.btns = items.map(([l, fn], i) => menuButton(this, UW / 2, 250 + i * (items.length > 3 ? 62 : 70), l, fn, 320, items.length > 3 ? 52 : 56));
+    this.sel = 0; this.btns[0].set(true);
+    this.btns.forEach((b, i) => b.r.on('pointerover', () => { this.sel = i; this.btns.forEach((o, j) => o.set(j === i)); }));
+    this.add.text(UW - 14, UH - 12, GAME_VERSION, { ...TXT, fontSize: '16px', color: '#b9ad8f' }).setOrigin(1, 1);
+    this.add.text(UW / 2, UH - 22, '↑ ↓ и Enter или мышь', { ...TXT, fontSize: '17px', color: '#d8ccaa' }).setOrigin(0.5);
+    const kb = this.input.keyboard;
+    kb.on('keydown', ev => {
+      music.start();
+      if (ev.code === 'ArrowUp' || ev.code === 'KeyW') this.move(-1);
+      else if (ev.code === 'ArrowDown' || ev.code === 'KeyS') this.move(1);
+      else if (ev.code === 'Enter' || ev.code === 'Space') this.btns[this.sel].fn();
+    });
+    this.input.on('pointerdown', () => music.start());
+    music.setRace(rk); music.setSeason(0); music.setMode('day');
+    this.t = 0; this.fireT = 0; this.fireF = 0; this.leaving = false;
+  }
+  move(d) { this.sel = (this.sel + d + this.btns.length) % this.btns.length; this.btns.forEach((b, i) => b.set(i === this.sel)); music.sfx('coin'); }
+  go(key) { if (this.leaving) return; this.leaving = true; this.cameras.main.fadeOut(250); this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(key)); }
+  setRace(rk) {
+    this.castle.setTexture('hall3_' + rk); this.wallL.setTexture('wall2_' + rk);
+    this.mon.setTexture('mon_A_' + rk); this.escort[0].setTexture('mel_A_' + rk); this.escort[1].setTexture('rng_A_' + rk);
+    music.setRace(rk);
+  }
+  update(time, delta) {
+    const dt = Math.min(delta, 50) / 1000, rk = Object.keys(RACES)[this.raceI];
+    twinkle(this, this.bd, time);
+    this.mon.x += 70 * dt; this.escort.forEach(e => e.x += 70 * dt);
+    const fr = Math.floor(time / 200) % 2 ? 'B' : 'A';
+    this.mon.setTexture(`mon_${fr}_${rk}`); this.escort[0].setTexture(`mel_${fr}_${rk}`); this.escort[1].setTexture(`rng_${fr === 'A' ? 'B' : 'A'}_${rk}`);
+    if (this.escort[1].x > UW + 120) {
+      this.raceI = (this.raceI + 1) % 3; this.setRace(Object.keys(RACES)[this.raceI]);
+      this.mon.x = -80; this.escort[0].x = -160; this.escort[1].x = -220;
+    }
+    this.fireT += dt; if (this.fireT > 0.14) { this.fireT = 0; this.fireF = (this.fireF + 1) % 3; this.fire.setTexture('fire_' + this.fireF); }
+    this.fireGlow.setAlpha(0.5 + 0.1 * Math.sin(time / 90));
+    for (const f of this.flies) f.o.setPosition(f.x + Math.sin(time / 1100 + f.ph) * 30, f.y + Math.sin(time / 700 + f.ph * 2) * 12).setAlpha(0.5 + 0.5 * Math.sin(time / 300 + f.ph));
+  }
+}
+
+// ---------- «Играть»: выбор народа и сложности ----------
 class SelectScene extends Phaser.Scene {
   constructor() { super('select'); }
   create() {
     buildAllTextures(this);
     this.picked = false;
-    this.cameras.main.setBackgroundColor('#22333b').fadeIn(300);
-    const gy = H - 86;
-    for (let x = 20; x < W; x += 70) this.add.image(x, gy + 4, x % 140 ? 'pine_far@1' : 'tree_far_1@1').setOrigin(0.5, 1).setScale(3).setAlpha(0.55);
-    this.add.tileSprite(0, gy, W, BANK - GROUND + 3, 'ground@1').setOrigin(0);
-    this.add.rectangle(0, gy + BANK - GROUND + 3, W, 120, 0x1b3040).setOrigin(0);
-
-    this.add.text(W / 2, 74, 'Heroes of Kingdoms', { ...TXT, fontSize: '50px', color: '#f2c14e', strokeThickness: 7 }).setOrigin(0.5);
-    this.add.text(W / 2, 126, 'Выбери народ. Правила у всех одни, отличаются облик и музыка.', { ...TXT, fontSize: '19px' }).setOrigin(0.5);
-
+    this.cameras.main.setBackgroundColor('#22333b').setOrigin(0, 0).setZoom(UI).fadeIn(300);
+    this.bd = menuBackdrop(this, false);
+    this.add.text(UW / 2, 50, 'Выбери народ и сложность', { ...TXT, fontSize: '40px', color: '#f2c14e', strokeThickness: 6 }).setOrigin(0.5);
+    this.add.text(UW / 2, 92, 'Правила у всех народов одни, отличаются облик, существа и музыка', { ...TXT, fontSize: '18px' }).setOrigin(0.5);
+    this.race = SETTINGS.race && RACES[SETTINGS.race] ? SETTINGS.race : 'human';
+    this.cards = {};
     ['human', 'orc', 'goblin'].forEach((k, i) => {
-      const x = W / 2 + (i - 1) * 330, y = 330, R = RACES[k];
-      const frame = this.add.rectangle(x, y, 286, 300, 0x000000, 0.25).setStrokeStyle(2, 0xefe3c2, 0.25).setInteractive({ useHandCursor: true });
-      this.add.image(x + 58, y + 40, 'hall1_' + k).setOrigin(0.5, 1).setScale(2.5).setAlpha(0.95);
+      const x = UW / 2 + (i - 1) * 330, y = 270, R = RACES[k];
+      const frame = this.add.rectangle(x, y, 290, 250, 0x000000, 0.3).setStrokeStyle(2, 0xefe3c2, 0.25).setInteractive({ useHandCursor: true });
+      this.add.image(x + 60, y + 40, 'hall1_' + k).setOrigin(0.5, 1).setScale(2.5).setAlpha(0.95);
       const spr = this.add.image(x - 54, y + 40, 'mon_A_' + k).setOrigin(0.5, 1).setScale(4);
-      this.add.image(x + 116, y + 40, 'mel_A_' + k).setOrigin(0.5, 1).setScale(3);
-      this.add.text(x, y + 74, R.name, { ...TXT, fontSize: '28px' }).setOrigin(0.5);
-      this.add.text(x, y + 108, `${R.units.melee}, ${R.units.mage.toLowerCase()}, ${R.units.beast.toLowerCase()}`, { ...TXT, fontSize: '16px', color: '#b9ad8f' }).setOrigin(0.5);
-      frame.on('pointerover', () => { frame.setStrokeStyle(2, 0xf2c14e, 1); spr.setTexture('mon_B_' + k); });
-      frame.on('pointerout', () => { frame.setStrokeStyle(2, 0xefe3c2, 0.25); spr.setTexture('mon_A_' + k); });
-      frame.on('pointerdown', () => this.pick(k));
+      this.add.image(x + 118, y + 40, 'mel_A_' + k).setOrigin(0.5, 1).setScale(3);
+      this.add.text(x, y + 66, `${i + 1}. ${R.name}`, { ...TXT, fontSize: '28px' }).setOrigin(0.5);
+      this.add.text(x, y + 98, `${R.units.melee}, ${R.units.mage.toLowerCase()}, ${R.units.uniq.toLowerCase()}`, { ...TXT, fontSize: '16px', color: '#b9ad8f' }).setOrigin(0.5);
+      frame.on('pointerover', () => spr.setTexture('mon_B_' + k));
+      frame.on('pointerout', () => spr.setTexture('mon_A_' + k));
+      frame.on('pointerdown', () => { music.start(); if (this.race === k) this.start(); else this.pickRace(k); });
+      this.cards[k] = frame;
     });
-    this.add.text(W / 2, H - 30, 'Нажми на карточку или клавиши 1, 2, 3. Звук включится с началом игры.', { ...TXT, fontSize: '16px', color: '#d8ccaa' }).setOrigin(0.5);
-    this.input.keyboard.on('keydown-ONE', () => this.pick('human'));
-    this.input.keyboard.on('keydown-TWO', () => this.pick('orc'));
-    this.input.keyboard.on('keydown-THREE', () => this.pick('goblin'));
+    this.add.text(UW / 2, 438, 'Сложность', { ...TXT, fontSize: '22px', color: '#d8ccaa' }).setOrigin(0.5);
+    this.diff = DIFFS[SETTINGS.diff] ? SETTINGS.diff : 'normal';
+    this.dbtns = DIFF_KEYS.map((d, i) => menuButton(this, UW / 2 + (i - 1) * 250, 482, DIFFS[d].name, () => this.pickDiff(d), 220, 48, 24));
+    this.ddesc = this.add.text(UW / 2, 526, '', { ...TXT, fontSize: '18px', color: '#b9ad8f' }).setOrigin(0.5);
+    this.back = menuButton(this, 170, UH - 50, 'Назад (Esc)', () => this.leave('title'), 240, 50, 22);
+    this.go = menuButton(this, UW - 190, UH - 50, 'В бой (Enter)', () => this.start(), 280, 50, 24);
+    this.go.set(true);
+    this.pickRace(this.race, true); this.pickDiff(this.diff, true);
+    const kb = this.input.keyboard;
+    kb.on('keydown', ev => {
+      music.start();
+      const c = ev.code;
+      if (c === 'Digit1') this.pickRace('human'); else if (c === 'Digit2') this.pickRace('orc'); else if (c === 'Digit3') this.pickRace('goblin');
+      else if (c === 'ArrowLeft' || c === 'KeyA') this.pickDiff(DIFF_KEYS[Math.max(0, DIFF_KEYS.indexOf(this.diff) - 1)]);
+      else if (c === 'ArrowRight' || c === 'KeyD') this.pickDiff(DIFF_KEYS[Math.min(2, DIFF_KEYS.indexOf(this.diff) + 1)]);
+      else if (c === 'Enter' || c === 'Space') this.start();
+      else if (c === 'Escape') this.leave('title');
+    });
   }
-  pick(k) {
+  pickRace(k, quiet) {
+    this.race = k;
+    for (const r in this.cards) this.cards[r].setStrokeStyle(r === k ? 4 : 2, r === k ? 0xf2c14e : 0xefe3c2, r === k ? 1 : 0.25).setFillStyle(0x000000, r === k ? 0.45 : 0.25);
+    music.setRace(k); if (!quiet) music.sfx('coin');
+  }
+  pickDiff(d, quiet) {
+    this.diff = d; this.dbtns.forEach((b, i) => b.set(DIFF_KEYS[i] === d));
+    this.ddesc.setText(DIFFS[d].desc); if (!quiet) music.sfx('coin');
+  }
+  leave(key) { if (this.picked) return; this.picked = true; this.cameras.main.fadeOut(250); this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start(key)); }
+  start() {
     if (this.picked) return; this.picked = true;
-    music.setRace(k); music.setSeason(0); music.start();
+    SETTINGS.race = this.race; SETTINGS.diff = this.diff; saveSettings();
+    music.setRace(this.race); music.setSeason(0); music.start();
     this.cameras.main.fadeOut(300);
-    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('game', { race: k }));
+    this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('game', { race: this.race, diff: this.diff }));
   }
+  update(time) { twinkle(this, this.bd, time); }
+}
+
+// ---------- «Как играть» ----------
+class HowScene extends Phaser.Scene {
+  constructor() { super('how'); }
+  create() {
+    this.cameras.main.setBackgroundColor('#22333b').setOrigin(0, 0).setZoom(UI).fadeIn(250);
+    this.bd = menuBackdrop(this, false);
+    this.add.rectangle(UW / 2, 318, UW - 80, 500, 0x0a0e14, 0.72).setStrokeStyle(2, 0xefe3c2, 0.25);
+    this.add.text(UW / 2, 46, 'Как играть', { ...TXT, fontSize: '40px', color: '#f2c14e', strokeThickness: 6 }).setOrigin(0.5);
+    const col = (x, title, lines) => {
+      this.add.text(x, 100, title, { ...TXT, fontSize: '25px', color: '#f2c14e' });
+      this.add.text(x, 140, lines.join('\n'), { ...TXT, fontSize: '18px', color: '#efe3c2', lineSpacing: 7 });
+    };
+    col(64, 'Управление', [
+      'A / D или ← → — ехать, Shift — галоп',
+      'S, ↓ или Enter — платить у таблички',
+      'W, ↑ или колесо — другой вариант постройки',
+      'E — рог: воины рядом идут за монархом',
+      'Пробел — молния (после Башни магов)',
+      'M — музыка, Esc — пауза и настройки',
+      '',
+      'Мышь: щелчок по земле — ехать туда,',
+      'по зданию, хижине или логову — ехать и платить',
+      'Касание: кнопки ◀ ▶ ↓ ↑, «Рог» и ⚡',
+    ]);
+    col(600, 'Цель и советы', [
+      'Монеты — единственный ресурс,',
+      'в кошельке помещается 30.',
+      'Найми рабочих в хижинах бродяг,',
+      'построй ратушу, стены и казарму.',
+      'Ферма даёт доход, пока в поле рабочие.',
+      'Ночью из логов идут чудовища. Удар',
+      'отнимает монеты, а на пустом кошельке —',
+      'конец игры. Рабочих за стенами спугивают.',
+      'На месте разрушенного логова — жилище',
+      'существ твоего народа, в центре — драконы.',
+      'Победа — снести вражеский замок.',
+    ]);
+    this.back = menuButton(this, UW / 2, UH - 46, 'Назад (Esc)', () => this.leave(), 260, 50, 22);
+    this.back.set(true);
+    this.input.keyboard.on('keydown', ev => { if (['Escape', 'Enter', 'Space'].includes(ev.code)) this.leave(); });
+    this.left = false;
+  }
+  leave() { if (this.left) return; this.left = true; this.cameras.main.fadeOut(200); this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('title')); }
+  update(time) { twinkle(this, this.bd, time); }
+}
+
+// ---------- «Настройки» ----------
+class SettingsScene extends Phaser.Scene {
+  constructor() { super('settings'); }
+  create() {
+    this.cameras.main.setBackgroundColor('#22333b').setOrigin(0, 0).setZoom(UI).fadeIn(250);
+    this.bd = menuBackdrop(this, false);
+    this.add.rectangle(UW / 2, 300, 760, IS_EXE ? 380 : 330, 0x0a0e14, 0.72).setStrokeStyle(2, 0xefe3c2, 0.25);
+    this.add.text(UW / 2, IS_EXE ? 70 : 90, 'Настройки', { ...TXT, fontSize: '40px', color: '#f2c14e', strokeThickness: 6 }).setOrigin(0.5);
+    this.ui = settingsUI(this, UW / 2, 300);
+    this.add.text(UW / 2, IS_EXE ? 456 : 432, '↑ ↓ — строка, ← → — изменить', { ...TXT, fontSize: '17px', color: '#b9ad8f' }).setOrigin(0.5);
+    this.back = menuButton(this, UW / 2, UH - 70, 'Назад (Esc)', () => this.leave(), 260, 50, 22);
+    this.back.set(true);
+    this.input.keyboard.on('keydown', ev => { if (ev.code === 'Escape' || ev.code === 'Enter') this.leave(); });
+    this.left = false;
+  }
+  leave() { if (this.left) return; this.left = true; this.ui.destroy(); this.cameras.main.fadeOut(200); this.cameras.main.once('camerafadeoutcomplete', () => this.scene.start('title')); }
+  update(time) { twinkle(this, this.bd, time); }
 }
 
 // ================== ИГРА ==================
@@ -1718,12 +2384,14 @@ function makeLevels(R) {
             { name: R.dwell2, c: 7, work: 16, tex: 'dwell2', req: 2, hires: ['melee', 'ranged'] },
             { name: R.dwell3, c: 12, work: 24, tex: 'dwell3', req: 3, hires: ['melee', 'ranged', 'beast'] }],
     farm:  [{ name: 'Ферма', c: 3, work: 8, tex: 'farm1', seasonal: true, hint: 'монеты, пока на поле работают 1-2 рабочих' }, { name: 'Ферма с мельницей', c: 6, work: 12, tex: 'farm2', req: 2, seasonal: true, hint: 'до 4 рабочих, урожай быстрее' }],
-    wall:  [{ name: 'Частокол', c: 2, work: 6, tex: 'wall1' }, { name: 'Каменная стена', c: 4, work: 10, tex: 'wall2', req: 2 }],
+    wall:  [{ name: 'Частокол', c: 2, work: 6, tex: 'wall1' }, { name: 'Каменная стена', c: 4, work: 10, tex: 'wall2', req: 2 },
+            { name: 'Стена со стрелком', c: 7, work: 14, tex: 'wall3', req: 3, hint: 'по стене ходит стрелок, бьёт всех врагов' }],
+    lodge: [{ name: 'Хижина бродяг', c: 4, work: 10, tex: 'lodge', hint: 'ещё 2 места для рабочих' }],
     forge: [{ name: R.forge, c: 6, work: 14, tex: 'forge1', req: 2, hint: 'все воины бьют на четверть сильнее' },
             { name: R.forge2, c: 10, work: 20, tex: 'forge2', req: 2, hires: ['siege'], hint: `откроет: ${R.units.siege.toLowerCase()}` }],
     guild: [{ name: R.guild, c: 8, work: 16, tex: 'guild1', req: 2, hires: ['mage'], hint: `откроет найм: ${R.units.mage.toLowerCase()}` },
             { name: R.guild2, c: 12, work: 24, tex: 'guild2', req: 2, hires: ['mage'], hint: 'монарх получит молнию' }],
-    bank:  [{ name: R.bank, c: 10, work: 18, tex: 'bank', req: 3, hint: 'хранит монеты сверх кошелька' }],
+    bank:  [{ name: R.bank, c: 10, work: 18, tex: 'bank', req: 3, hint: 'хранит монеты, сюда носят налоги' }],
     tower: [{ name: R.tower, c: 5, work: 10, tex: 'tower1', hint: 'сама стреляет по чудовищам' }, { name: R.tower2, c: 8, work: 14, tex: 'tower2', req: 2 }],
     outpost: [{ name: R.outpost, c: 7, work: 14, tex: 'outpost', hires: ['timp'] }],
   };
@@ -1738,7 +2406,7 @@ const HILLS = [
 
 class GameScene extends Phaser.Scene {
   constructor() { super('game'); }
-  init(d) { this.rk = d.race || 'human'; this.R = RACES[this.rk]; this.LV = makeLevels(this.R); }
+  init(d) { this.diffKey = DIFFS[d.diff] ? d.diff : 'normal'; this.diff = DIFFS[this.diffKey]; this.rk = d.race || 'human'; this.R = RACES[this.rk]; this.LV = makeLevels(this.R); }
 
   create() {
     const R = this.R, rk = this.rk, c = PLAYER_X;
@@ -1770,11 +2438,14 @@ class GameScene extends Phaser.Scene {
     this.cityParts = { houses: [], towers: [], vills: [], carts: [] };
     this.deco(this.add.image(c + 140, GROUND + 2, 'sign').setOrigin(0.5, 1).setScale(S).setDepth(3));
 
-    DENS.forEach(([x, tier]) => this.addDen(x, tier));
+    { const th = ['imp', 'gob', 'gnome', 'imp', 'gob', 'gnome', ['imp', 'gob', 'gnome'][Math.floor(Math.random() * 3)]].sort(() => Math.random() - 0.5);
+      DENS.forEach(([x, tier], i) => this.addDen(x, tier, th[i % th.length])); }
     for (const side of [-1, 1]) this.dens.filter(d => Math.sign(d.x - c) === side && (side < 0 || d.x < ENEMY_X)).sort((a, z) => Math.abs(a.x - c) - Math.abs(z.x - c)).forEach((d, i) => d.ring = i + 1);
     HUTS.forEach(x => this.addHut(x));
     this.foeInit();
+    this.initTax();
     this.placeForage();
+    this.placeChests(); this.santa = null;
 
     for (let i = 0; i < 4; i++) this.dropCoin(c + 90 + i * 36, false);
     for (let i = 0; i < 50; i++) { const x = c + (i % 2 ? 1 : -1) * Phaser.Math.Between(260, 8200); if (x > 300 && x < ENEMY_X - 1600) this.dropCoin(x, false); }
@@ -1794,23 +2465,23 @@ class GameScene extends Phaser.Scene {
     this.NIGHT = new Phaser.Display.Color(22, 32, 50);
 
     // интерфейс
-    const hud = o => o.setScrollFactor(0).setDepth(100);
+    const hud = o => o.setScrollFactor(0).setDepth(100).setScale(o.scaleX * UI, o.scaleY * UI).setPosition(o.x * UI, o.y * UI);
     this.hudCoin = hud(this.add.image(24, 26, 'coin').setScale(4));
     this.hudText = hud(this.add.text(42, 26, '0', { ...TXT, fontSize: '29px', color: '#f2c14e' }).setOrigin(0, 0.5));
     this.bankText = hud(this.add.text(14, 54, '', { ...TXT, fontSize: '18px', color: '#e0c49a' }).setOrigin(0, 0.5));
     this.crewText = hud(this.add.text(14, 76, '', { ...TXT, fontSize: '18px', color: '#d8ccaa' }).setOrigin(0, 0.5));
-    hud(this.add.text(W - 20, 26, R.name, { ...TXT, fontSize: '24px' }).setOrigin(1, 0.5));
+    hud(this.add.text(UW - 20, 26, R.name, { ...TXT, fontSize: '24px' }).setOrigin(1, 0.5));
     this.foeText = hud(this.add.text(14, 76, '', { ...TXT, fontSize: '18px', color: '#e07a7a' }).setOrigin(0, 0.5));
-    this.dayText = hud(this.add.text(W / 2, 20, '', { ...TXT, fontSize: '20px', color: '#d8ccaa' }).setOrigin(0.5));
-    this.musicBtn = hud(this.add.text(W - 20, 54, music.muted ? 'Музыка: выкл' : 'Музыка: вкл', { ...TXT, fontSize: '18px', color: '#d8ccaa' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
+    this.dayText = hud(this.add.text(UW / 2, 20, '', { ...TXT, fontSize: '20px', color: '#d8ccaa' }).setOrigin(0.5));
+    this.musicBtn = hud(this.add.text(UW - 20, 54, music.muted ? 'Музыка: выкл' : 'Музыка: вкл', { ...TXT, fontSize: '18px', color: '#d8ccaa' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
     this.musicBtn.on('pointerdown', () => this.toggleMusic());
-    this.boltText = hud(this.add.text(W - 20, 78, '', { ...TXT, fontSize: '18px', color: '#9fc3ff' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
+    this.boltText = hud(this.add.text(UW - 20, 78, '', { ...TXT, fontSize: '18px', color: '#9fc3ff' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
     this.boltText.on('pointerdown', () => { if (this.guild.level >= 2 && this.lightningReady) { this.aimBolt = true; this.toast('Щёлкни туда, куда ударить молнией'); } else this.castLightning(); });
-    this.hornBtn = hud(this.add.text(W - 20, 102, 'Рог: E', { ...TXT, fontSize: '18px', color: '#e0c49a' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
+    this.hornBtn = hud(this.add.text(UW - 20, 102, 'Рог: E', { ...TXT, fontSize: '18px', color: '#e0c49a' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
     this.hornBtn.on('pointerdown', () => this.blowHorn());
     this.marker = this.add.image(0, GROUND + 1, 'stake_' + rk).setOrigin(0.5, 1).setScale(2).setDepth(9).setAlpha(0.7).setVisible(false);
     this.mini = hud(this.add.graphics());
-    this.toastText = hud(this.add.text(W / 2, 112, '', { ...TXT, fontSize: '24px', align: 'center' }).setOrigin(0.5).setAlpha(0));
+    this.toastText = hud(this.add.text(UW / 2, 112, '', { ...TXT, fontSize: '24px', align: 'center' }).setOrigin(0.5).setAlpha(0));
     this.updateHud(true);
 
     this.keys = this.input.keyboard.addKeys('LEFT,RIGHT,DOWN,UP,A,D,S,W,E,SHIFT,M,SPACE,ENTER,ESC,R');
@@ -1818,21 +2489,19 @@ class GameScene extends Phaser.Scene {
     this.input.on('pointerdown', (ptr, objs) => { music.start(); if (this.panelOpen || this.over) return; if (objs && objs.length) return; this.onPointer(ptr); });
     this.input.on('wheel', () => { if (this.near && !this.panelOpen) this.cyclePick(this.near); });
     if (this.sys.game.device.input.touch) this.makeTouchControls();
-    else hud(this.add.text(W / 2, H - 12, 'A D ехать, Shift галоп, S/Enter платить, W выбор, E рог, Пробел молния, мышь: щелчок, Esc пауза',
-      { ...TXT, fontSize: '16px', color: '#d8ccaa' }).setOrigin(0.5, 1));
 
     this.applySeason(0, true);
     this.buildWeather();
     this.checkEvents();
-    this.toast(`Собери монеты и построй: ${R.hall}\nНа востоке враг: ${this.foeName()}. Снеси их замок!`);
+    this.toast(`Собери монеты и построй: ${R.hall}\nНа востоке враг: ${this.foeName()}. Снеси их замок!\nEsc — пауза и настройки`);
   }
 
   toggleMusic() { music.start(); const on = music.toggle(); this.musicBtn.setText(on ? 'Музыка: вкл' : 'Музыка: выкл'); }
-  maxBuilders() { return 2 + this.hall.level * 2; }
+  maxBuilders() { return 2 + this.hall.level * 2 + 2 * this.huts.filter(h => h.bonus).length; }
   maxUnits() { return 4 + this.hall.level * 2 + 2 * this.spots.filter(s => s.type === 'outpost' && s.level > 0).length; }
   unitName(k) { return this.R.units[k] || TAMED[k]; }
   lv(s) { return s.levels || this.LV[s.type]; }
-  armyCount() { return this.units.filter(u => u.kind !== 'siege').length; }
+  armyCount() { return this.units.filter(u => u.kind !== 'siege' && u.kind !== 'dragon').length; }
   dmgMul() { return this.forge.level >= 1 ? 1.25 : 1; }
   deco(img, sf = 1) { img.sf = sf; this.decor.push(img); return img; }
   seas(img, base, sf = 1) { this.seasonal.push({ o: img, base }); return this.deco(img, sf); }
@@ -1846,9 +2515,9 @@ class GameScene extends Phaser.Scene {
     this.stars = stars.setAlpha(0);
     this.moon = this.add.image(W - 170, 140, 'moon').setScale(3).setScrollFactor(0).setDepth(-30).setAlpha(0);
     this.clouds = [];
-    for (let i = 0; i < 7; i++) this.clouds.push(this.add.image(i * 220 + R0() * 120, 70 + R0() * 100, 'cloud').setScale(3).setScrollFactor(0).setDepth(-28).setAlpha(0.85));
+    for (let i = 0; i < 9; i++) this.clouds.push(this.add.image(i * 190 + R0() * 120, 60 + R0() * 170, 'cloud').setScale(3).setScrollFactor(0).setDepth(-28).setAlpha(0.85));
     this.birds = [];
-    for (let i = 0; i < 7; i++) this.birds.push({ o: this.add.image(R0() * W, 120 + R0() * 80, 'bird_A').setScale(3).setScrollFactor(0).setDepth(-27), sp: 30 + R0() * 30, ph: R0() * 6 });
+    for (let i = 0; i < 9; i++) this.birds.push({ o: this.add.image(R0() * W, 130 + R0() * 150, 'bird_A').setScale(3).setScrollFactor(0).setDepth(-27), sp: 30 + R0() * 30, ph: R0() * 6 });
     this.mountains = this.add.graphics().setScrollFactor(0.05).setDepth(-26);
     this.hill1 = this.add.graphics().setScrollFactor(0.15).setDepth(-24);
     this.hill2 = this.add.graphics().setScrollFactor(0.3).setDepth(-22);
@@ -1859,6 +2528,12 @@ class GameScene extends Phaser.Scene {
     for (let x = 0; x < farLen; x += 18 + Math.floor(R0() * 34)) {
       const key = R0() < 0.35 ? 'pine_far' : 'tree_far_' + Math.floor(R0() * 3);
       this.seas(this.add.image(x, GROUND + 3, key + '@0').setOrigin(0.5, 1).setScale(3).setScrollFactor(0.55).setDepth(-15), key, 0.55);
+    }
+    // средний ярус леса: деревья поменьше и в дымке, между дальним лесом и ближним
+    const midLen = 0.8 * (WORLD - W) + W;
+    for (let x = 0; x < midLen; x += 40 + Math.floor(R0() * 70)) {
+      const key = R0() < 0.4 ? 'pine_near' : 'tree_near_' + Math.floor(R0() * 3);
+      this.seas(this.add.image(x, GROUND + 3, key + '@0').setOrigin(0.5, 1).setScale(2).setScrollFactor(0.8).setDepth(-13).setAlpha(0.55).setFlipX(R0() < 0.5), key, 0.8);
     }
     this.ground = this.add.tileSprite(0, GROUND - 3, WORLD, BANK - GROUND + 3, 'ground@0').setOrigin(0).setDepth(-5);
     this.add.tileSprite(c - 880, GROUND + 3, 1760, 12, 'path').setOrigin(0).setDepth(-4);
@@ -1878,6 +2553,12 @@ class GameScene extends Phaser.Scene {
       const key = r < 0.25 ? 'bush' : r < 0.42 ? 'rock' : r < 0.78 ? 'tuft' : 'flower';
       if (key === 'bush' && Math.abs(x - c) < 950) continue;
       const o = this.seas(this.add.image(x, GROUND + 2, key + '@0').setOrigin(0.5, 1).setScale(S).setDepth(key === 'bush' ? -6 : 3).setFlipX(R0() < 0.5), key); if (key === 'bush') o.tree = true;
+    }
+    // пни, брёвна, папоротники и грибы
+    for (let x = 0; x < WORLD; x += 90 + Math.floor(R0() * 220)) {
+      if (Math.abs(x - c) < 700 || nearHut(x)) continue;
+      const r = R0(), key = r < 0.22 ? 'stump' : r < 0.36 ? 'log' : r < 0.75 ? 'fern' : 'shrooms';
+      this.seas(this.add.image(x, GROUND + 3, key + '@0').setOrigin(0.5, 1).setScale(S).setDepth(key === 'fern' ? 8 : 2).setFlipX(R0() < 0.5), key);
     }
     for (let i = 0; i < 11; i++) {
       const x = c + (i % 2 ? 1 : -1) * (1200 + R0() * 9000);
@@ -1940,7 +2621,7 @@ class GameScene extends Phaser.Scene {
     this.ground.setTexture(`ground@${s}`);
     this.drawHills(s);
     for (const f of this.forage) this.setForageLook(f);
-    if (this.farm && this.farm.level) { this.farm.building.setTexture(this.texFor(this.farm, this.farm.level)); }
+    for (const fm of this.spots) if (fm.type === 'farm' && fm.level && fm.building) fm.building.setTexture(this.texFor(fm, fm.level));
     const key = SEASONS[s].key;
     this.parts.forEach((p, i) => {
       const on = key === 'winter' || (key === 'autumn' && i < 28) || (key === 'spring' && i < 16);
@@ -1968,7 +2649,7 @@ class GameScene extends Phaser.Scene {
       const lb = o.label, w2 = lb.width / 2 + 4;
       add(o.x - sx - w2, o.ui.y - lb.height - 2, o.x - sx + w2, o.ui.y + 24);
     }
-    if (this.toastText.alpha > 0.02) { const t = this.toastText; add(W / 2 - t.width / 2 - 4, t.y - t.height / 2 - 2, W / 2 + t.width / 2 + 4, t.y + t.height / 2 + 2); }
+    if (this.toastText.alpha > 0.02) { const t = this.toastText, tw = t.displayWidth / 2, th = t.displayHeight / 2; add(t.x - tw - 4, t.y - th - 2, t.x + tw + 4, t.y + th + 2); }
     return rects;
   }
   updateReflection(time) {
@@ -2003,7 +2684,7 @@ class GameScene extends Phaser.Scene {
   makeUI(o, h) {
     o.paid = 0; o.slots = []; o.slotsCost = -1;
     o.ui = this.add.container(o.x, 0).setDepth(20).setVisible(false);
-    o.label = this.add.text(0, 0, '', { ...TXT, align: 'center' }).setOrigin(0.5, 1);
+    o.label = this.add.text(0, 0, '', { ...TXT, fontSize: '22px', align: 'center' }).setOrigin(0.5, 1);
     o.ui.add(o.label);
     o.bar = this.add.graphics().setDepth(19);
     this.placeUI(o, h);
@@ -2018,7 +2699,7 @@ class GameScene extends Phaser.Scene {
     }
     o.slotsCost = cost;
   }
-  infoFor(o) { return o.isFoeGate ? this.foeGateInfo() : o.isDen ? this.denInfo(o) : o.isHut ? this.hutInfo(o) : this.spotInfo(o); }
+  infoFor(o) { return o.isTaxDesk ? this.taxInfo() : o.isFoeGate ? this.foeGateInfo() : o.isDen ? this.denInfo(o) : o.isHut ? this.hutInfo(o) : this.spotInfo(o); }
   showUI(o) {
     const info = this.infoFor(o);
     if (info.mode === 'none') { o.ui.setVisible(false); return info; }
@@ -2040,7 +2721,7 @@ class GameScene extends Phaser.Scene {
       if (this.pendingAct === o) this.pendingAct = null;
       this.time.delayedCall(300, () => {
         o.locked = false; o.paid = 0; o.slotsCost = -1;
-        if (o.isFoeGate) this.completeFoeAssault(); else if (o.isDen) this.completeDen(o); else if (o.isHut) this.completeHut(o); else this.completeSpot(o, info);
+        if (o.isTaxDesk) this.completeTax(); else if (o.isFoeGate) this.completeFoeAssault(); else if (o.isDen) this.completeDen(o); else if (o.isHut) this.completeHut(o); else this.completeSpot(o, info);
       });
     }
   }
@@ -2091,11 +2772,16 @@ class GameScene extends Phaser.Scene {
       if (n >= MAX_SIEGE) return { mode: 'info', label: `${R.units.siege}: ${n}/${MAX_SIEGE}${sw}` };
       return { mode: 'pay', label: `Собрать: ${R.units.siege}  ${n}/${MAX_SIEGE}${sw}`, cost: U.cost, act: 'hire', unit: o.unit };
     }
+    if (o.unit === 'dragon') {
+      const n = this.units.filter(u => u.kind === 'dragon').length;
+      if (n >= MAX_DRAGON) return { mode: 'info', label: `${R.units.dragon}: ${n}/${MAX_DRAGON}\nбольше драконов не прокормить${sw}` };
+      return { mode: 'pay', label: `Призвать: ${R.units.dragon}  ${n}/${MAX_DRAGON}\nсамый сильный боец${sw}`, cost: U.cost, act: 'hire', unit: o.unit };
+    }
     const n = this.armyCount(), max = this.maxUnits();
     if (n >= max) return { mode: 'info', label: `Воины: ${n}/${max}` + (hl < 3 ? `\nБольше мест даст: ${this.LV.hall[hl].name}` : '') + sw };
     return { mode: 'pay', label: `Нанять: ${this.unitName(o.unit)}  ${n}/${max}${sw}`, cost: U.cost, act: 'hire', unit: o.unit };
   }
-  cyclePick(s) { if (s.isDen || s.isHut || s.isFoeGate || s.paid || s.type === 'bank') return; const n = this.spotOptions(s).length; if (n > 1) { s.pick = (s.pick + 1) % n; s.slotsCost = -1; } }
+  cyclePick(s) { if (s.isDen || s.isHut || s.isFoeGate || s.isTaxDesk || s.paid || s.type === 'bank') return; const n = this.spotOptions(s).length; if (n > 1) { s.pick = (s.pick + 1) % n; s.slotsCost = -1; } }
   completeSpot(s, info) {
     this.puff(s.x, 0xcbb894); music.sfx('build');
     if (info.act === 'hire') { this.spawnUnit(s.x, info.unit); return; }
@@ -2109,7 +2795,7 @@ class GameScene extends Phaser.Scene {
   setLevelSprite(s) {
     if (s.building) s.building.destroy();
     s.extras.forEach(e => e.destroy()); s.extras = [];
-    s.building = null;
+    s.building = null; s.archer = null;
     if (s.level === 0) return;
     const key = this.texFor(s, s.level);
     s.building = this.add.image(s.x, GROUND + 1, key).setOrigin(0.5, 1).setScale(S).setDepth(4);
@@ -2121,10 +2807,15 @@ class GameScene extends Phaser.Scene {
       this.tweens.add({ targets: cr, y: cr.y - 10, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.inOut' });
       s.extras.push(cr, this.add.image(s.x, cr.y + 14, 'glow_white').setScale(1.2).setBlendMode(Phaser.BlendModes.ADD).setDepth(51).setAlpha(0.5));
     }
+    if (s.type === 'wall' && s.level === 3) {
+      s.archer = this.add.sprite(s.x - (s.side || 1) * 2, GROUND + 1 - 20 * S, 'rng_A_' + this.rk).setOrigin(0.5, 1).setScale(S).setDepth(3.9).setFlipX((s.side || 1) < 0);
+      s.extras.push(s.archer);
+    }
     if (s.type === 'forge') s.extras.push(this.add.image(left + 24.5 * S, GROUND - 7 * S, 'glow').setScale(1.1).setBlendMode(Phaser.BlendModes.ADD).setDepth(51));
   }
   finishLevel(s) {
     const R = this.R;
+    if (s.type === 'lodge') { this.lodgeDone(s); return; }
     s.level++; s.site = null;
     if (s.scaffold) { s.scaffold.destroy(); s.scaffold = null; }
     if (s.stake) { s.stake.destroy(); s.stake = null; }
@@ -2139,7 +2830,7 @@ class GameScene extends Phaser.Scene {
       this.refreshStakes();
       this.toast([`Готово: ${name}\nТеперь найми рабочих в хижинах`,
         `Готово: ${name}\nОткрылись кузница, гильдия магов и улучшения`,
-        `Готово: ${name}\nОткрылись банк и ${R.dwell3.toLowerCase()}`][s.level - 1]);
+        `Готово: ${name}\nОткрылись: ${R.bank.toLowerCase()}, ${R.dwell3.toLowerCase()}, стены со стрелками`][s.level - 1]);
     } else if (s.type === 'dwell' || s.type === 'outpost') this.toast(`Готово: ${name}\nТеперь можно нанять: ${this.unitName(cur.hires[cur.hires.length - 1])}`);
     else if (s.type === 'tower') this.toast(`Готово: ${name}. Сама стреляет по чудовищам`);
     else if (s.type === 'farm') this.toast(`Готово: ${name}
@@ -2148,8 +2839,12 @@ class GameScene extends Phaser.Scene {
     else if (s.type === 'guild') {
       if (s.level === 1) this.toast(`Готово: ${name}\nЗдесь можно нанять: ${R.units.mage.toLowerCase()}`);
       else { this.lightningReady = true; this.toast(`Готово: ${name}\nМонарх получил молнию: Пробел, раз за ночь`); }
-    } else if (s.type === 'bank') this.toast(`Готово: ${name}\nЗдесь можно хранить монеты сверх кошелька`);
-    else if (s.type === 'wall') { this.toast(`Готово: ${name}. Город расширяется`); this.updateCity(); }
+    } else if (s.type === 'bank') this.toast(`Готово: ${name}\nХранит монеты сверх кошелька. Рядом нанимают: ${R.tax.toLowerCase()}`);
+    else if (s.type === 'wall') {
+      this.toast(s.level === 3 ? `Готово: ${name}\nНа стену поднялся стрелок` : `Готово: ${name}. Город расширяется`);
+      if (s.level === 1 && s.ring >= 1) this.addPlots(s);
+      this.updateCity();
+    }
     this.updateHud(true);
   }
   farmTimer(s) {
@@ -2242,11 +2937,11 @@ class GameScene extends Phaser.Scene {
   setForageLook(f) { f.img.setTexture(`${f.kind}${f.charges > 0 && this.season !== 3 ? '' : '_e'}@${this.season}`); }
 
   // ---------- логова ----------
-  addDen(x, tier) {
+  addDen(x, tier, theme = 'imp') {
     const hp = [0, 50, 90, 150][tier];
-    const d = { isDen: true, x, tier, hp, maxHp: hp, hoard: 0, alive: true, enraged: false };
-    d.img = this.add.image(x, GROUND + 3, 'den').setOrigin(0.5, 1).setScale(S + (tier - 1) * 0.75).setDepth(4);
-    d.glow = this.add.image(x, GROUND - 34, 'glow_red').setScale(2.5 + tier * 0.6).setBlendMode(Phaser.BlendModes.ADD).setDepth(51);
+    const d = { isDen: true, x, tier, hp, maxHp: hp, hoard: 0, alive: true, enraged: false, theme };
+    d.img = this.add.image(x, GROUND + 3, theme === 'imp' ? 'den' : 'den_' + theme).setOrigin(0.5, 1).setScale(S + (tier - 1) * 0.75).setDepth(4);
+    d.glow = this.add.image(x, GROUND - 34, DEN_THEMES[theme].glow).setScale(2.5 + tier * 0.6).setBlendMode(Phaser.BlendModes.ADD).setDepth(51);
     d.half = d.img.displayWidth / 2;
     this.makeUI(d, d.img.displayHeight);
     this.dens.push(d);
@@ -2255,7 +2950,7 @@ class GameScene extends Phaser.Scene {
   }
   denInfo(d) {
     if (!d.alive) return { mode: 'none' };
-    const head = `Логово чудовищ, сила ${d.tier}${d.hoard ? `\nвнутри ${d.hoard} краденых монет` : ''}`;
+    const head = `${DEN_THEMES[d.theme || 'imp'].name}, сила ${d.tier}${d.hoard ? `\nвнутри ${d.hoard} краденых монет` : ''}`;
     if (this.isNight || this.waveSent) return { mode: 'info', label: `${head}\nНочью на штурм не пойти` };
     if (this.units.some(u => u.mode === 'assault' && u.den === d)) return { mode: 'info', label: `${head}\nШтурм идёт` };
     if (!this.units.length) return { mode: 'info', label: `${head}\nДля штурма нужны воины` };
@@ -2323,14 +3018,14 @@ class GameScene extends Phaser.Scene {
   removeGroundCoin(cn) { const i = this.groundCoins.indexOf(cn); if (i >= 0) this.groundCoins.splice(i, 1); this.tweens.killTweensOf(cn.img); }
   updateHud(quiet) {
     this.hudText.setText(`${this.coins}/${WALLET}`).setColor(this.danger ? '#ff6a5a' : (this.coins === 0 ? '#e0a090' : (this.coins >= WALLET ? '#fff1b0' : '#f2c14e')));
-    this.bankText.setText(this.bank.level ? `В банке: ${this.banked}` : '');
+    this.bankText.setText(this.bank.level ? `${this.R.bank}: ${this.banked}` : '');
     const sieges = this.units.filter(u => u.kind === 'siege').length;
-    this.crewText.setText(`Рабочие ${this.builders.length}/${this.maxBuilders()}    Воины ${this.armyCount()}/${this.maxUnits()}` + (this.forge.level >= 2 || sieges ? `    Машины ${sieges}/${MAX_SIEGE}` : '')).setY(this.bank.level ? 76 : 54);
-    if (this.foeText) this.foeText.setY(this.bank.level ? 98 : 76);
+    this.crewText.setText(`Рабочие ${this.builders.length}/${this.maxBuilders()}    Воины ${this.armyCount()}/${this.maxUnits()}` + (this.forge.level >= 2 || sieges ? `    Машины ${sieges}/${MAX_SIEGE}` : '') + (this.units.some(u => u.kind === 'dragon') ? `    Драконы ${this.units.filter(u => u.kind === 'dragon').length}/${MAX_DRAGON}` : '') + (this.collectors && this.collectors.length ? `    Сборщики ${this.collectors.length}/${TAX_MAX}` : '')).setY((this.bank.level ? 76 : 54) * UI);
+    if (this.foeText) this.foeText.setY((this.bank.level ? 98 : 76) * UI);
     if (!quiet) this.tweens.add({ targets: this.hudCoin, scale: 5, duration: 90, yoyo: true });
   }
   drawMinimap(time) {
-    const g = this.mini, x0 = W / 2 - 290, y0 = 40, w = 580, k = w / WORLD, c = this.center;
+    const g = this.mini, x0 = UW / 2 - 290, y0 = 40, w = 580, k = w / WORLD, c = this.center;
     g.clear();
     g.fillStyle(0x141d21, 0.6).fillRect(x0 - 2, y0 - 2, w + 4, 11);
     g.fillStyle(this.season === 3 ? 0xc9d8de : 0x4f6b34, 1).fillRect(x0, y0 + 3, w, 2);
@@ -2362,10 +3057,14 @@ class GameScene extends Phaser.Scene {
     if (site) return { type: 'build', spot: site, x: this.workX(site, b) };
     const dmg = this.spots.filter(s => s.level > 0 && s.hp < s.maxHp && ok(s)).sort((a, z) => Math.abs(a.x - b.spr.x) - Math.abs(z.x - b.spr.x))[0];
     if (dmg) return { type: 'repair', spot: dmg, x: this.workX(dmg, b) };
-    const fm = this.farm, onFarm = this.builders.filter(o => o !== b && o.task && o.task.type === 'farm').length;
-    if (fm.level > 0 && !fm.site && this.season !== 3 && !this.isNight && !this.waveSent && onFarm < FARM_SLOTS[fm.level]) {
-      const slot = [0, 1, 2, 3].find(i => !this.builders.some(o => o !== b && o.task && o.task.type === 'farm' && o.task.slot === i));
-      return { type: 'farm', slot, x: fm.x - fm.half + (18 + slot * 22) * (fm.level === 2 ? 0.9 : 1) };
+    if (this.season !== 3 && !this.isNight && !this.waveSent) {
+      const farms = this.spots.filter(s => s.type === 'farm' && s.level > 0 && !s.site && ok(s)).sort((a, z) => Math.abs(a.x - b.spr.x) - Math.abs(z.x - b.spr.x));
+      for (const fm of farms) {
+        const on = this.builders.filter(o => o !== b && o.task && o.task.type === 'farm' && o.task.spot === fm);
+        if (on.length >= FARM_SLOTS[fm.level]) continue;
+        const slot = [0, 1, 2, 3].find(i => !on.some(o => o.task.slot === i));
+        return { type: 'farm', spot: fm, slot, x: fm.x - fm.half + (18 + slot * 22) * (fm.level === 2 ? 0.9 : 1) };
+      }
     }
     if (inside) return { type: 'shelter', x: c - 80 + (b.idx % 9) * 18 };
     if (this.canForage(b)) {
@@ -2381,7 +3080,7 @@ class GameScene extends Phaser.Scene {
     for (const b of this.builders) {
       let frame = 'walk0';
       if (unsafe && b.task && ['forage', 'fish'].includes(b.task.type)) this.dropTask(b);
-      if (b.task && b.task.type === 'farm' && (this.isNight || this.waveSent || this.season === 3 || this.farm.level === 0 || this.farm.site)) b.task = null;
+      if (b.task && b.task.type === 'farm' && (this.isNight || this.waveSent || this.season === 3 || b.task.spot.level === 0 || b.task.spot.site)) b.task = null;
       if (unsafe && b.task && ['build', 'repair'].includes(b.task.type)) { const [pl, pr] = this.perimeter(); if (b.task.spot.x < pl - 60 || b.task.spot.x > pr + 60) b.task = null; }
       if (unsafe && b.task && b.task.type === 'shelter') { b.evalT -= dt; if (b.evalT <= 0) { b.evalT = 1; const t = this.chooseTask(b, true); if (t.type !== 'shelter') b.task = t; } }
       if (!unsafe && b.task && b.task.type === 'shelter') b.task = null;
@@ -2390,7 +3089,7 @@ class GameScene extends Phaser.Scene {
         if (b.evalT <= 0) {
           b.evalT = 1;
           if (this.spots.some(s => s.site || (s.level > 0 && s.hp < s.maxHp))) b.task = null;
-          else if (this.farm.level > 0 && this.season !== 3 && this.builders.filter(o => o.task && o.task.type === 'farm').length < FARM_SLOTS[this.farm.level]) b.task = null;
+          else if (this.season !== 3 && this.spots.some(fm => fm.type === 'farm' && fm.level > 0 && !fm.site && this.builders.filter(o => o.task && o.task.type === 'farm' && o.task.spot === fm).length < FARM_SLOTS[fm.level])) b.task = null;
           else if (this.canForage(b) && this.forage.some(f => f.charges > 0 && !f.taken && Math.abs(f.x - c) < 2800)) b.task = null;
         }
       }
@@ -2411,7 +3110,7 @@ class GameScene extends Phaser.Scene {
           else { b.spr.setFlipX(tk.spot.x < b.spr.x); frame = working(true); tk.spot.hp = Math.min(tk.spot.maxHp, tk.spot.hp + dt * 1.5); this.drawBar(tk.spot); }
         } else if (tk.type === 'farm') {
           b.spr.setFlipX(b.idx % 2 === 0); frame = working(false); b.t += dt;
-          if (b.t > FARM_RATE[this.farm.level]) { b.t = 0; this.dropCoin(b.spr.x + Phaser.Math.Between(-16, 16), true, GROUND - 70); music.sfx('coin'); }
+          if (b.t > FARM_RATE[tk.spot.level]) { b.t = 0; this.dropCoin(b.spr.x + Phaser.Math.Between(-16, 16), true, GROUND - 70); music.sfx('coin'); }
         } else if (tk.type === 'forage') {
           frame = working(false); b.t += dt;
           if (b.t > 3) {
@@ -2453,7 +3152,8 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: spr, alpha: 1, duration: 300 });
     this.units.push({ spr, kind, U, target: x + Phaser.Math.Between(-60, 60), wait: 0, ft: 0, f: 0, hp: U.hp, atk: 0, flash: 0, cast: 0, mode: 'patrol', den: null, side: this.units.length % 2 ? 1 : -1, post: Math.random() });
     this.updateHud(true);
-    this.toast(kind === 'siege' ? `${this.R.units.siege} собрана` : `${this.unitName(kind)} в строю: ${this.armyCount()}/${this.maxUnits()}`);
+    this.toast(kind === 'siege' ? `${this.R.units.siege} собрана` : kind === 'dragon' ? `${this.R.units.dragon} прилетел: ${this.units.filter(u => u.kind === 'dragon').length}/${MAX_DRAGON}` : `${this.unitName(kind)} в строю: ${this.armyCount()}/${this.maxUnits()}`);
+    if (kind === 'dragon') { music.sfx('rage'); this.cameras.main.shake(250, 0.006); }
   }
   damageUnit(u, dmg) {
     u.hp -= dmg; music.sfx('hit'); u.flash = 0.1;
@@ -2484,6 +3184,14 @@ class GameScene extends Phaser.Scene {
       music.sfx('magic');
       this.tweens.add({ targets: o, x: tx, y: GROUND - 30, duration: Math.abs(tx - u.spr.x) * 1.4 + 120, ease: 'Sine.inOut',
         onComplete: () => { o.destroy(); this.puff(tx, Phaser.Display.Color.HexStringToColor(this.R.pal.G).color, 8, u.U.aoe * 0.6, GROUND - 20); this.aoe(tx, u.U.aoe, dmg, !!den); } });
+    } else if (u.kind === 'dragon') {
+      u.cast = 0.5; music.sfx('meteor');
+      const sx = u.spr.x + (flip ? -60 : 60), sy = u.spr.y - 50;
+      for (let i = 0; i < 3; i++) {
+        const fb = this.add.image(sx, sy, 'fireball').setScale(S).setDepth(9).setFlipX(flip);
+        this.tweens.add({ targets: fb, x: tx + (i - 1) * 18, y: GROUND - 14, duration: Math.abs(tx - sx) * 1.1 + 160 + i * 70, ease: 'Quad.in',
+          onComplete: () => { fb.destroy(); if (i === 1) { this.puff(tx, 0xff7a2a, 12, u.U.aoe, GROUND - 10); this.aoe(tx, u.U.aoe, dmg, true, u.U.denMul); } } });
+      }
     } else if (u.kind === 'siege') {
       u.cast = 0.6; music.sfx('catapult');
       const b = this.add.image(u.spr.x, GROUND - 60, 'boulder').setScale(S).setDepth(9), x0 = u.spr.x, dur = 900 + Math.abs(tx - x0) * 0.8;
@@ -2511,7 +3219,7 @@ class GameScene extends Phaser.Scene {
       u.atk -= dt; u.cast -= dt;
       if (u.mode === 'assault' && (((this.isNight || this.waveSent) && !(u.den && u.den.isFoeTarget)) || !u.den || !u.den.alive)) { u.mode = 'patrol'; u.den = null; }
       if (u.mode === 'follow') { if (this.followUnit(u, dt)) continue; }
-      const heavy = ['beast', 'tbrute', 'tfiend'].includes(u.kind) ? 'heavy' : 'slash';
+      const heavy = ['beast', 'tbrute', 'tfiend', 'uniq'].includes(u.kind) ? 'heavy' : 'slash';
       let moveDir = 0, speed = 55;
       const guard = this.isNight || this.waveSent;
       const sight = u.kind === 'siege' ? U.range : (u.mode === 'assault' ? 280 : (guard ? 340 : 380));
@@ -2544,6 +3252,7 @@ class GameScene extends Phaser.Scene {
       if (u.kind === 'mage' && u.cast > 0) fr = 'C';
       if (u.kind === 'siege') fr = u.cast > 0 ? 'B' : 'A';
       if (u.flash > 0) { u.flash -= dt; fr = 'X'; }
+      if (u.kind === 'dragon') { if (fr !== 'X') fr = ['A', 'B', 'C', 'B'][Math.floor(this.time.now / 150) % 4]; u.spr.y = GROUND - 72 + Math.sin(this.time.now / 380 + u.post * 6) * 7; }
       u.spr.setTexture(`${U.tex}_${fr}_${rk}`);
     }
   }
@@ -2551,9 +3260,10 @@ class GameScene extends Phaser.Scene {
   // ---------- чудовища ----------
   spawnEnemy(den, state, kind = 'imp', rage = false, tx = this.center) {
     const F = FOES[kind];
-    const spr = this.add.sprite(den.x + Phaser.Math.Between(-70, 70), GROUND, `${F.tex}_A`).setOrigin(0.5, 1).setScale(S).setDepth(7).setAlpha(0);
+    const theme = den.theme || 'imp', tk = DEN_THEMES[theme].tex[THEME_KIND[kind]];
+    const spr = this.add.sprite(den.x + Phaser.Math.Between(-70, 70), GROUND, `${tk}_A`).setOrigin(0.5, 1).setScale(S).setDepth(7).setAlpha(0);
     this.tweens.add({ targets: spr, alpha: 1, duration: 500 });
-    this.enemies.push({ spr, den, kind, F, fac: 'beast', tk: F.tex, ts: '', tx, hp: F.hp, state, atk: 0, ft: 0, f: 0, loot: 0, lootImgs: [], dead: false, flash: 0, target: den.x, wait: Math.random() * 2, rage });
+    this.enemies.push({ spr, den, kind, F, fac: 'beast', theme, tk, ts: '', tx, hp: F.hp, state, atk: 0, ft: 0, f: 0, loot: 0, lootImgs: [], dead: false, flash: 0, target: den.x, wait: Math.random() * 2, rage });
   }
   waveFor(d, nn, winter) {
     let imps = 0, brutes = 0, fiends = 0;
@@ -2577,6 +3287,7 @@ class GameScene extends Phaser.Scene {
       if (!d.alive) continue;
       let list = this.doom ? this.waveFor(d, nn + 8, true).concat(this.waveFor(d, nn + 4, true)) : this.waveFor(d, nn, winter);
       if (angry && !this.doom) list = list.concat(list.slice(0, Math.ceil(list.length / 2)));
+      if (this.diff.lazy && !this.doom && nn % 2 === 0) list = [];   // лёгкая сложность: логова копят силы через ночь
       list = list.slice(0, Math.max(0, cap - total));
       list.forEach((kind, i) => this.time.delayedCall(i * (this.doom ? 700 : 1300), () => { if (d.alive && !this.over) this.spawnEnemy(d, 'advance', kind, angry || this.doom, this.denTarget(d, i)); }));
       total += list.length;
@@ -2586,6 +3297,7 @@ class GameScene extends Phaser.Scene {
     this.planFoeRaid();
     if (this.doom) { music.sfx('doom'); this.toast(`Конец света! Все чудовища идут на вас: ${total}\nПродержись до рассвета`); }
     else if (rage) { music.sfx('rage'); this.toast(`Кровавая ночь! Логово-близнец ${rage.x < this.center ? 'слева' : 'справа'} мстит\nИз логов выходят чудовища: ${total}+`); }
+    else if (!total && this.diff.lazy) this.toast('Сумерки. Этой ночью логова затаились\nРабочие всё равно уходят за стены');
     else if (total) { music.sfx('horn'); this.toast(`Сумерки. Из логов выходят чудовища: ${total}${angry ? '\nВ бурю они злее' : (winter ? '\nЗимой их больше' : '')}\nРабочие уходят за стены`); }
   }
   startNight() { this.isNight = true; this.nightCount++; if (!this.bloodNight) music.setMode('night'); if (!this.waveSent) this.sendWaves(); }
@@ -2676,13 +3388,18 @@ class GameScene extends Phaser.Scene {
       if (e.kind === 'mage' && e.cast > 0) fr = 'C';
       if (e.flash > 0) { e.flash -= dt; fr = 'X'; }
       e.spr.setTexture(`${e.tk}_${fr}${e.ts}`);
+      // у разных племён своя походка: дикари подпрыгивают, гномы переваливаются
+      if (e.theme === 'gob') e.spr.y = GROUND - (e.f ? 3 : 0);
+      else if (e.theme === 'gnome' && e.spr.originX === 0.5) e.spr.setAngle(e.f ? 5 : -5);
       const top = e.spr.y - e.spr.displayHeight - 8;
       e.lootImgs.forEach((im, i) => im.setPosition(e.spr.x + (i - (e.lootImgs.length - 1) / 2) * 8, top - i * 3));
       if (e.fac === 'foe') { this.updateFoeUnit(e, dt); continue; }
       // чудовище бьёт любого противника вплотную: наших воинов и воинов врага
       if (e.state !== 'flee') {
         const opp = this.nearestOpp(e, 24);
-        if (opp) { if (e.atk <= 0) { e.atk = F.cd; this.meleeFx(e.spr, opp.spr.x, 'claw'); this.hurt(opp, F.steal); } continue; }
+        if (opp) { if (e.atk <= 0) { e.atk = F.cd; this.meleeFx(e.spr, opp.spr.x, 'claw'); this.hurt(opp, F.steal * (opp.fac ? 1 : this.diff.dmg)); } continue; }
+        // рабочий под носом: удар мимоходом, рабочий убегает к бродягам
+        if (e.atk <= 0) { const bw = this.builderAt(e.spr.x); if (bw) { e.atk = F.cd; this.meleeFx(e.spr, bw.spr.x, 'claw'); this.scareBuilder(bw, e.spr.x); } }
       }
       if (e.state === 'flee') {
         const home = e.den.alive ? e.den.x : (e.spr.x < c ? 0 : WORLD);
@@ -2698,7 +3415,7 @@ class GameScene extends Phaser.Scene {
       }
       if (e.state === 'idle') {
         const near = this.nearestOpp(e, 220);
-        if (near) { const dx = near.spr.x - e.spr.x; e.spr.setFlipX(dx < 0); e.spr.x += Math.sign(dx) * F.spd * dt; continue; }
+        if (near) { const dx = near.spr.x - e.spr.x; e.spr.setFlipX(dx < 0); if (!this.blockingBuilding(e.spr.x, Math.sign(dx))) e.spr.x += Math.sign(dx) * F.spd * dt; continue; }
         if (e.wait > 0) { e.wait -= dt; continue; }
         const dx = e.target - e.spr.x;
         if (Math.abs(dx) < 3) { e.wait = Phaser.Math.FloatBetween(1, 4); e.target = e.den.x + Phaser.Math.Between(-160, 160); }
@@ -2720,7 +3437,7 @@ class GameScene extends Phaser.Scene {
       if (coin) { this.removeGroundCoin(coin); coin.img.destroy(); this.grabLoot(e, 1); continue; }
       if (Math.abs(this.player.x - e.spr.x) < 26 && e.atk <= 0) { e.atk = 1.2; this.meleeFx(e.spr, this.player.x, 'claw'); this.hitPlayer(e); if (e.state === 'flee' || this.over) continue; }
       const bl = this.blockingBuilding(e.spr.x, dir);
-      if (bl) { if (e.atk <= 0) { e.atk = F.cd + 0.1; this.meleeFx(e.spr, bl.x, 'claw'); this.damageBuilding(bl, F.bld); } continue; }
+      if (bl) { if (e.atk <= 0) { e.atk = F.cd + 0.1; this.meleeFx(e.spr, bl.x, 'claw'); this.damageBuilding(bl, F.bld * this.diff.dmg); } continue; }
       const far = Math.abs(e.spr.x - c) > 1400;
       e.spr.x += dir * (far ? F.far : F.spd) * (e.rage ? 1.15 : 1) * dt;
     }
@@ -2757,22 +3474,30 @@ class GameScene extends Phaser.Scene {
     this.closePanel();
     this.tweens.killTweensOf(this.toastText); this.toastText.setAlpha(0);
     for (const o of [...this.spots, ...this.dens, ...this.huts, ...this.specials]) o.ui.setVisible(false);
-    const p = this.add.container(0, 0).setScrollFactor(0).setDepth(200);
-    p.add(this.add.rectangle(0, 0, W, H, 0x0a0e14, 0.72).setOrigin(0).setInteractive());
-    const y0 = H / 2 - 150;
-    p.add(this.add.text(W / 2, y0, title, { ...TXT, fontSize: '55px', color, strokeThickness: 6 }).setOrigin(0.5));
-    if (sub) p.add(this.add.text(W / 2, y0 + 56, sub, { ...TXT, fontSize: '24px' }).setOrigin(0.5));
-    lines.forEach((l, i) => p.add(this.add.text(W / 2, y0 + 116 + i * 34, l, { ...TXT, fontSize: '22px', color: '#d8ccaa' }).setOrigin(0.5)));
+    const p = this.mkPanel(200);
+    p.add(this.add.rectangle(0, 0, UW, UH, 0x0a0e14, 0.72).setOrigin(0).setInteractive());
+    const y0 = UH / 2 - 150;
+    p.add(this.add.text(UW / 2, y0, title, { ...TXT, fontSize: '55px', color, strokeThickness: 6 }).setOrigin(0.5));
+    if (sub) p.add(this.add.text(UW / 2, y0 + 56, sub, { ...TXT, fontSize: '24px' }).setOrigin(0.5));
+    lines.forEach((l, i) => p.add(this.add.text(UW / 2, y0 + 116 + i * 34, l, { ...TXT, fontSize: '22px', color: '#d8ccaa' }).setOrigin(0.5)));
+    const bw = buttons.length > 2 ? 250 : 300;
     buttons.forEach((b, i) => {
-      const x = W / 2 + (i - (buttons.length - 1) / 2) * 300, y = y0 + 116 + lines.length * 34 + 56;
-      const r = this.add.rectangle(x, y, 276, 52, 0x000000, 0.4).setStrokeStyle(2, 0xf2c14e, 0.8).setInteractive({ useHandCursor: true });
+      const x = UW / 2 + (i - (buttons.length - 1) / 2) * (bw + 20), y = y0 + 116 + lines.length * 34 + 56;
+      const r = this.add.rectangle(x, y, bw - 14, 52, 0x000000, 0.4).setStrokeStyle(2, 0xf2c14e, 0.8).setInteractive({ useHandCursor: true });
       r.on('pointerdown', b.fn);
       p.add(r); p.add(this.add.text(x, y, b.label, { ...TXT, fontSize: '22px' }).setOrigin(0.5));
     });
     this.panelOpen = { p, buttons };
   }
+  // Панель поверх игры: объекты в координатах 1152×648, переводим на экран.
+  // Не контейнер: у детей контейнера Phaser не ловит щелчки мыши при неподвижной камере интерфейса.
+  mkPanel(depth) {
+    const list = [];
+    return { list, add: o => { o.setScrollFactor(0).setDepth(depth).setPosition(o.x * UI, o.y * UI).setScale(o.scaleX * UI, o.scaleY * UI); list.push(o); return o; },
+      destroy() { list.forEach(o => o.destroy()); list.length = 0; } };
+  }
   closePanel() { if (this.panelOpen) { this.panelOpen.p.destroy(); this.panelOpen = null; } }
-  statLines() { return [`Дней продержались: ${this.dayNum}`, `Логов разрушено: ${this.stats.dens} из ${DENS.length}`, `Врагов повержено: ${this.stats.killed}`, this.foe && this.foe.alive ? `Вражеский замок: уровень ${this.foe.hall.level}` : 'Вражеский замок разрушен']; }
+  statLines() { return [`Сложность: ${this.diff.name.toLowerCase()}, дней продержались: ${this.dayNum}`, `Логов разрушено: ${this.stats.dens} из ${DENS.length}`, `Врагов повержено: ${this.stats.killed}`, this.foe && this.foe.alive ? `Вражеский замок: уровень ${this.foe.hall.level}` : 'Вражеский замок разрушен']; }
   gameOver() {
     if (this.over) return;
     this.over = true; this.setDanger(false, true);
@@ -2780,38 +3505,54 @@ class GameScene extends Phaser.Scene {
     this.tweens.add({ targets: this.player, angle: this.player.flipX ? -90 : 90, y: GROUND + 6, alpha: 0.6, duration: 700, ease: 'Quad.in' });
     this.vignette.setAlpha(0.8);
     this.time.delayedCall(1300, () => this.showPanel('Корона пала', 'Игра окончена', this.statLines(),
-      [{ label: 'Начать заново (Enter)', fn: () => this.scene.restart({ race: this.rk }) }, { label: 'Выбрать народ (R)', fn: () => this.scene.start('select') }], '#e0584a'));
+      [{ label: 'Начать заново (Enter)', fn: () => this.scene.restart({ race: this.rk, diff: this.diffKey }) }, { label: 'Выбрать народ (R)', key: 'R', fn: () => this.scene.start('select') }], '#e0584a'));
   }
   victory() {
     if (this.won || this.over) return;
     this.won = true; music.sfx('victory');
     this.showPanel('Вражеское королевство пало!', `${this.foeName()} повержены, земли твои`, this.statLines(),
-      [{ label: 'Играть дальше (Enter)', fn: () => this.closePanel() }, { label: 'Новая игра (R)', fn: () => this.scene.start('select') }]);
+      [{ label: 'Играть дальше (Enter)', fn: () => this.closePanel() }, { label: 'Новая игра (R)', key: 'R', fn: () => this.scene.start('select') }]);
+  }
+  showPausePanel() {
+    this.showPanel('Пауза', `День ${this.dayNum}, ${SEASONS[this.season].name}`, this.statLines(),
+      [{ label: 'Продолжить (Enter)', fn: () => this.togglePause() }, { label: 'Настройки', fn: () => this.showSettings() }, { label: 'Выбрать народ (R)', key: 'R', fn: () => this.scene.start('select') }]);
+  }
+  // настройки поверх паузы: те же, что в главном меню
+  showSettings() {
+    this.closePanel();
+    const p = this.mkPanel(200);
+    p.add(this.add.rectangle(0, 0, UW, UH, 0x0a0e14, 0.8).setOrigin(0).setInteractive());
+    p.add(this.add.text(UW / 2, 150, 'Настройки', { ...TXT, fontSize: '50px', color: '#f2c14e', strokeThickness: 6 }).setOrigin(0.5));
+    const ui = settingsUI(this, UW / 2, 320, 201, p, () => this.musicBtn.setText(music.muted ? 'Музыка: выкл' : 'Музыка: вкл'));
+    const back = () => { ui.destroy(); this.musicBtn.setText(music.muted ? 'Музыка: выкл' : 'Музыка: вкл'); this.closePanel(); this.showPausePanel(); };
+    const r = this.add.rectangle(UW / 2, 500, 260, 52, 0x000000, 0.4).setStrokeStyle(2, 0xf2c14e, 0.8).setInteractive({ useHandCursor: true });
+    r.on('pointerdown', back);
+    p.add(r); p.add(this.add.text(UW / 2, 500, 'Назад (Enter)', { ...TXT, fontSize: '22px' }).setOrigin(0.5));
+    this.panelOpen = { p, buttons: [{ label: 'Назад', fn: back }], onEsc: back };
   }
   togglePause() {
     if (this.over || (this.panelOpen && !this.paused)) return;
     this.paused = !this.paused;
-    if (this.paused) { this.showPanel('Пауза', `День ${this.dayNum}, ${SEASONS[this.season].name}`, this.statLines(),
-      [{ label: 'Продолжить (Enter)', fn: () => this.togglePause() }, { label: 'Выбрать народ (R)', fn: () => this.scene.start('select') }]); this.tweens.pauseAll(); this.time.paused = true; }
+    if (this.paused) { this.showPausePanel(); this.tweens.pauseAll(); this.time.paused = true; }
     else { this.closePanel(); this.tweens.resumeAll(); this.time.paused = false; }
   }
 
   // ---------- сообщения и сенсорное управление ----------
   toast(msg) {
     this.tweens.killTweensOf(this.toastText);
-    this.toastText.setText(msg).setAlpha(0).setY(120);
-    this.tweens.add({ targets: this.toastText, alpha: 1, y: 112, duration: 250, yoyo: true, hold: 3000 });
+    this.toastText.setText(msg).setAlpha(0).setY(120 * UI);
+    this.tweens.add({ targets: this.toastText, alpha: 1, y: 112 * UI, duration: 250, yoyo: true, hold: 3000 });
   }
   makeTouchControls() {
     this.input.addPointer(2);
     const btn = (x, label, key, r = 40) => {
-      const b = this.add.circle(x, H - 84, r, 0x000000, 0.35).setStrokeStyle(2, 0xefe3c2, 0.5).setScrollFactor(0).setDepth(100).setInteractive();
-      this.add.text(x, H - 84, label, { ...TXT, fontSize: '26px' }).setOrigin(0.5).setScrollFactor(0).setDepth(101);
+      const b = this.add.circle(x * UI, (UH - 84) * UI, r * UI, 0x000000, 0.35).setStrokeStyle(2, 0xefe3c2, 0.5).setScrollFactor(0).setDepth(100).setInteractive();
+      this.add.text(x * UI, (UH - 84) * UI, label, { ...TXT, fontSize: '26px' }).setOrigin(0.5).setScale(UI).setScrollFactor(0).setDepth(101);
       b.on('pointerdown', () => { this.walkTo = null; this.pendingAct = null; if (key === 'upTap') { this.touch.upTap = true; this.touch.up = true; } else if (key === 'bolt') this.castLightning(); else if (key === 'horn') this.blowHorn(); else this.touch[key] = true; });
       const off = () => { if (key === 'upTap') this.touch.up = false; else this.touch[key] = false; };
       b.on('pointerup', off); b.on('pointerout', off);
     };
-    btn(84, '◀', 'left', 58); btn(212, '▶', 'right', 58); btn(W - 88, '↓', 'pay', 60); btn(W - 210, '↑', 'upTap', 46); btn(W - 312, 'Рог', 'horn', 42); btn(W - 404, '⚡', 'bolt', 38);
+    btn(84, '◀', 'left', 58); btn(212, '▶', 'right', 58); btn(UW - 88, '↓', 'pay', 60); btn(UW - 210, '↑', 'upTap', 46); btn(UW - 312, 'Рог', 'horn', 42); btn(UW - 404, '⚡', 'bolt', 38);
   }
 
   // ---------- главный цикл ----------
@@ -2819,7 +3560,8 @@ class GameScene extends Phaser.Scene {
     const dt = Math.min(delta, 50) / 1000, k = this.keys, rk = this.rk, c = this.center, JD = Phaser.Input.Keyboard.JustDown;
     if (!this.panelOpen) this.updateReflection(time);
     if (this.panelOpen) {
-      if (JD(k.ENTER)) this.panelOpen.buttons[0].fn(); else if (JD(k.R)) this.panelOpen.buttons[1].fn(); else if (JD(k.ESC) && this.paused) this.togglePause();
+      const rb = this.panelOpen.buttons.find(b => b.key === 'R');
+      if (JD(k.ENTER)) this.panelOpen.buttons[0].fn(); else if (JD(k.R) && rb) rb.fn(); else if (JD(k.ESC) && this.paused) (this.panelOpen.onEsc ? this.panelOpen.onEsc() : this.togglePause());
       return;
     }
     if (JD(k.ESC)) { this.togglePause(); return; }
@@ -2903,7 +3645,7 @@ class GameScene extends Phaser.Scene {
     for (const cn of [...this.groundCoins]) {
       if (!cn.ready || Math.abs(cn.img.x - this.player.x) >= 22) continue;
       if (this.coins >= WALLET) {
-        if (time - this.lastFull > 6000) { this.lastFull = time; this.toast(`Кошелёк полон: ${WALLET} монет\nПотрать их${this.bank.level ? ' или положи в банк' : ''}`); }
+        if (time - this.lastFull > 6000) { this.lastFull = time; this.toast(`Кошелёк полон: ${WALLET} монет\nПотрать их${this.bank.level ? ' или положи на хранение: ' + this.R.bank.toLowerCase() : ''}`); }
         break;
       }
       this.removeGroundCoin(cn); this.coins++; this.updateHud(); music.sfx('coin');
@@ -2915,7 +3657,8 @@ class GameScene extends Phaser.Scene {
     const all = [...this.spots, ...this.dens, ...this.huts, ...this.specials];
     let near = null, best = 1e9;
     for (const o of all) {
-      const d = Math.abs(o.x - this.player.x), r = o.isDen || o.isFoeGate ? 140 : o.isHut ? 110 : Math.max(75, (o.half || 0) * 0.8);
+      if (o.isTaxDesk && (!this.bank.level || this.bank.site)) continue;
+      const d = Math.abs(o.x - this.player.x), r = o.isDen || o.isFoeGate ? 140 : o.isHut ? 110 : o.isTaxDesk ? 40 : Math.max(75, (o.half || 0) * 0.8);
       if (d < r && d < best) { best = d; near = o; }
     }
     this.near = near;
@@ -2971,6 +3714,7 @@ class GameScene extends Phaser.Scene {
     if (this.over) return;
     this.updateUnits(dt);
     this.updateBuilders(dt, time);
+    this.updateTax(dt); this.updateChests(time); this.updateSanta(dt, time);
     this.drawMinimap(time);
   }
 
@@ -2992,14 +3736,16 @@ class GameScene extends Phaser.Scene {
   // Разрушенное логово: зверинец на его месте, башня ближе к городу и новая линия стен за ним
   conquer(d) {
     if (d.conquered) return; d.conquered = true;
-    const c = this.center, side = Math.sign(d.x - c), R = this.R, hire = DEN_HIRE[d.tier];
-    const lv = [{ name: R.outpost, c: 4 + d.tier * 3, work: 14, tex: 'outpost', hires: [hire], hint: `откроет найм: ${TAMED[hire].toLowerCase()}, +2 места для воинов` }];
+    const c = this.center, side = Math.sign(d.x - c), R = this.R, mid = d.tier === 3;
+    // обычное логово уступает место жилищу уникального существа народа, центральное — зверинцу с драконами
+    const lv = mid ? [{ name: R.outpost, c: 12, work: 22, tex: 'outpost', hires: ['dragon'], hint: `откроет: ${R.units.dragon.toLowerCase()}, до ${MAX_DRAGON}` }]
+      : [{ name: R.uniqhome, c: 4 + d.tier * 2, work: 14, tex: 'uniqhome', hires: ['uniq'], hint: `откроет найм: ${R.units.uniq.toLowerCase()}, +2 места для воинов` }];
     const op = this.addSpot('outpost', d.x, false, lv);
     op.tier = d.tier; this.measure(op, this.texFor(op, 1)); this.placeUI(op, op.h);
     this.addSpot('tower', d.x - side * 320);
     if (d.ring && WALL_LINES[String(side)][d.ring] != null && !this.walls[String(side)][d.ring]) this.addWallSpot(side, d.ring);
     this.refreshStakes();
-    this.time.delayedCall(4200, () => { if (!this.over) this.toast(`Земля у логова свободна. Здесь можно построить:\n${R.outpost.toLowerCase()}, дозорную башню и новую стену`); });
+    this.time.delayedCall(4200, () => { if (!this.over) this.toast(`Земля у логова свободна. Здесь можно построить:\n${(mid ? R.outpost : R.uniqhome).toLowerCase()}, дозорную башню и новую стену`); });
   }
 
   // ================== ЕДИНЫЙ ГОРОД ==================
@@ -3017,7 +3763,7 @@ class GameScene extends Phaser.Scene {
     this.cityWall.setTexture(key).setPosition(x0, GROUND + 3).setSize(x1 - x0, th).setVisible(true);
     kill(P.towers); kill(P.houses); kill(P.vills); kill(P.carts);
     for (let x = x0 + 160; x < x1 - 80; x += 420) P.towers.push(this.add.image(x, GROUND + 3, `ctower${lvl}_${rk}`).setOrigin(0.5, 1).setScale(S).setDepth(-9));
-    const R0 = rng(777), free = x => this.spots.every(s => Math.abs(x - s.x) > (s.half || 40) + 34) && Math.abs(x - this.center) > 60;
+    const R0 = rng(777), free = x => [...this.spots, ...this.huts, ...this.specials].every(s => Math.abs(x - s.x) > (s.half || 60) + 34) && Math.abs(x - this.center) > 60;
     for (let x = x0 + 60; x < x1 - 60; x += 70 + Math.floor(R0() * 90)) {
       if (!free(x)) continue;
       const h = this.add.image(x, GROUND + 3, `townhouse_${Math.floor(R0() * 4)}_${rk}`).setOrigin(0.5, 1).setScale(S).setDepth(-7).setFlipX(R0() < 0.5);
@@ -3077,7 +3823,7 @@ class GameScene extends Phaser.Scene {
     const U = u.U, foe = this.nearestEnemy(u.spr.x, Math.max(300, U.range));
     if (foe) {
       const dx = foe.spr.x - u.spr.x; u.spr.setFlipX(dx < 0);
-      if (Math.abs(dx) < U.range) { if (u.atk <= 0) { u.atk = U.cd; this.retinueT = RETINUE_CALM; if (U.shot) this.shoot(u, foe.spr.x, foe, null); else { this.meleeFx(u.spr, foe.spr.x, ['beast', 'tbrute', 'tfiend'].includes(u.kind) ? 'heavy' : 'slash'); this.damageEnemy(foe, U.dmg * this.dmgMul()); } } this.animUnit(u, 0); return true; }
+      if (Math.abs(dx) < U.range) { if (u.atk <= 0) { u.atk = U.cd; this.retinueT = RETINUE_CALM; if (U.shot) this.shoot(u, foe.spr.x, foe, null); else { this.meleeFx(u.spr, foe.spr.x, ['beast', 'tbrute', 'tfiend', 'uniq'].includes(u.kind) ? 'heavy' : 'slash'); this.damageEnemy(foe, U.dmg * this.dmgMul()); } } this.animUnit(u, 0); return true; }
       this.retinueT = Math.max(this.retinueT, RETINUE_CALM * 0.6);
       this.animUnit(u, Math.sign(dx) * (u.kind === 'siege' ? 80 : 140) * dt); return true;
     }
@@ -3094,17 +3840,22 @@ class GameScene extends Phaser.Scene {
     if (u.kind === 'mage' && u.cast > 0) fr = 'C';
     if (u.kind === 'siege') fr = u.cast > 0 ? 'B' : 'A';
     if (u.flash > 0) { u.flash -= 1 / 60; fr = 'X'; }
+    if (u.kind === 'dragon') { if (fr !== 'X') fr = ['A', 'B', 'C', 'B'][Math.floor(this.time.now / 150) % 4]; u.spr.y = GROUND - 72 + Math.sin(this.time.now / 380 + u.post * 6) * 7; }
     u.spr.setTexture(`${U.tex}_${fr}_${rk}`);
   }
 
   // ================== БАШНИ ==================
   updateTowers(dt) {
     for (const s of this.spots) {
-      if (s.type !== 'tower' || s.level === 0) continue;
-      s.cd = (s.cd || 0) - dt; if (s.cd > 0) continue;
-      const foe = this.nearestEnemy(s.x, 300); if (!foe) continue;
-      s.cd = s.level === 2 ? 1.0 : 1.4;
-      const dmg = (s.level === 2 ? 1.6 : 1) * this.dmgMul(), y0 = GROUND - s.h + 30;
+      const archer = s.type === 'wall' && s.level === 3 && s.archer;
+      if (!archer && (s.type !== 'tower' || s.level === 0)) continue;
+      s.cd = (s.cd || 0) - dt;
+      if (archer && s.cd < 0.85) archer.setTexture('rng_A_' + this.rk);
+      if (s.cd > 0) continue;
+      const foe = this.nearestEnemy(s.x, archer ? 360 : 300); if (!foe) continue;
+      s.cd = archer ? 1.15 : s.level === 2 ? 1.0 : 1.4;
+      if (archer) archer.setTexture('rng_B_' + this.rk).setFlipX(foe.spr.x < s.x);
+      const dmg = (archer ? 1.3 : s.level === 2 ? 1.6 : 1) * this.dmgMul(), y0 = archer ? GROUND - 20 * S - 30 : GROUND - s.h + 30;
       const a = this.add.image(s.x, y0, 'arrow').setScale(S).setDepth(9).setFlipX(foe.spr.x < s.x);
       music.sfx('shoot');
       this.tweens.add({ targets: a, x: foe.spr.x, y: GROUND - 30, duration: Math.abs(foe.spr.x - s.x) * 1.5 + 160, ease: 'Sine.in', onComplete: () => { a.destroy(); if (!foe.dead) this.damageEnemy(foe, dmg); } });
@@ -3116,6 +3867,7 @@ class GameScene extends Phaser.Scene {
     let best = null, bd = 1e9;
     for (const o of [...this.spots, ...this.dens, ...this.huts, ...this.specials]) {
       if (o.isDen && !o.alive) continue;
+      if (o.isTaxDesk && (!this.bank.level || this.bank.site)) continue;
       const hw = Math.max(o.half || 50, 50) + 10, top = o.ui.visible ? o.ui.y - o.label.height - 12 : (o.topY || GROUND - 80) - 14, d = Math.abs(wx - o.x);
       if (d < hw && y > top && y < GROUND + 14 && d < bd) { bd = d; best = o; }
     }
@@ -3165,7 +3917,7 @@ class GameScene extends Phaser.Scene {
     const storms = new Set(), n = Math.random() < 0.5 ? 1 : 2;
     while (storms.size < n) storms.add(day());
     const cat = Math.max(y === 0 ? 6 : minDay, day());
-    this.year = { y, storms, cat, kind: Math.random() < 0.5 ? 'meteor' : 'volcano' };
+    this.year = { y, storms, cat, kind: Math.random() < 0.5 ? 'meteor' : 'volcano', santa: start + 15 + Math.floor(Math.random() * 5) };
   }
   checkEvents() {
     if (this.over) return;
@@ -3181,6 +3933,7 @@ class GameScene extends Phaser.Scene {
     if (this.doom) { music.sfx('doom'); this.cameras.main.shake(600, 0.01); this.toast('Сегодня конец света!\nБуря, катастрофа, а ночью все чудовища разом пойдут на вас'); }
     else if (this.storm) this.toast(this.storm === 'rain' ? 'Надвигается гроза. Рабочие не выходят за стены,\nа ночью чудовища будут злее' : 'Метель. Рабочие не выходят за стены,\nа ночью чудовища будут злее');
     else if (wasStorm) this.toast('Буря утихла');
+    if (this.year.santa === d) this.time.delayedCall(9000 + Math.random() * 25000, () => { if (!this.isNight && !this.waveSent) this.santaFlight(); });
   }
   updateWeather(dt, time) {
     const st = this.storm;
@@ -3412,7 +4165,7 @@ Object.assign(GameScene.prototype, {
     return best;
   },
   foeAttack(e, opp) {
-    const dmg = e.U.dmg * this.foe.dmgMul, f = this.foe;
+    const dmg = e.U.dmg * this.foe.dmgMul * (opp.fac ? 1 : this.diff.dmg), f = this.foe;
     if (!e.U.shot) { this.meleeFx(e.spr, opp.spr.x, e.kind === 'beast' ? 'heavy' : 'slash'); this.hurt(opp, dmg); return; }
     if (e.kind === 'mage') e.cast = 0.35;
     const key = e.kind === 'mage' ? `orb_${f.race}_foe` : f.race === 'goblin' ? 'pebble' : f.race === 'orc' ? 'javelin' : 'arrow';
@@ -3431,16 +4184,20 @@ Object.assign(GameScene.prototype, {
     const nearHome = Math.abs(e.spr.x - ENEMY_X) < 1350;
     if (opp && (e.state === 'raid' || nearHome)) {
       const dx = opp.spr.x - e.spr.x; e.spr.setFlipX(dx < 0);
-      if (Math.abs(dx) < U.range) { if (e.atk <= 0) { e.atk = U.cd; this.foeAttack(e, opp); } }
-      else this.moveE(e, Math.sign(dx) * U.speed * dt);
+      if (Math.abs(dx) < U.range) { if (e.atk <= 0) { e.atk = U.cd; this.foeAttack(e, opp); } return; }
+      // за нашей стеной не пройти: сперва её надо разбить
+      const wl = this.blockingBuilding(e.spr.x, Math.sign(dx));
+      if (wl) { if (e.atk <= 0) { e.atk = U.cd + 0.3; if (U.shot) this.foeAttack(e, { spr: { x: wl.x, active: false } }); else this.meleeFx(e.spr, wl.x); this.damageBuilding(wl, e.F.bld * this.diff.dmg); } return; }
+      this.moveE(e, Math.sign(dx) * U.speed * dt);
       return;
     }
     if (e.state === 'raid') {
       if (Math.abs(this.player.x - e.spr.x) < 26 && e.atk <= 0) { e.atk = 1.2; this.meleeFx(e.spr, this.player.x); this.hitPlayer(e); return; }
+      if (e.atk <= 0 && !e.U.shot) { const bw = this.builderAt(e.spr.x); if (bw) { e.atk = U.cd; this.meleeFx(e.spr, bw.spr.x); this.scareBuilder(bw, e.spr.x); } }
       let dir = Math.sign(c - e.spr.x) || 1;
       if (Math.abs(e.spr.x - c) < 120) dir = Math.sign(this.player.x - e.spr.x) || 1;
       const bl = this.blockingBuilding(e.spr.x, dir);
-      if (bl) { if (e.atk <= 0) { e.atk = U.cd + 0.3; if (U.shot) this.foeAttack(e, { spr: { x: bl.x, active: false } }); else this.meleeFx(e.spr, bl.x); this.damageBuilding(bl, e.F.bld); } return; }
+      if (bl) { if (e.atk <= 0) { e.atk = U.cd + 0.3; if (U.shot) this.foeAttack(e, { spr: { x: bl.x, active: false } }); else this.meleeFx(e.spr, bl.x); this.damageBuilding(bl, e.F.bld * this.diff.dmg); } return; }
       this.moveE(e, dir * (Math.abs(e.spr.x - c) > 1400 ? 210 : U.speed * 0.8) * dt);
       return;
     }
@@ -3498,7 +4255,7 @@ Object.assign(GameScene.prototype, {
   foeRaid() {
     const f = this.foe, nn = this.dayNum;
     f.raids = (f.raids || 0) + 1;
-    const size = Math.min(18, 1 + f.raids * 2 + Math.floor(nn / 5));
+    const size = Math.min(22, Math.round((1 + f.raids * 2 + Math.floor(nn / 5)) * this.diff.raid));
     const guards = this.foeUnits().filter(e => e.state === 'guard').sort(() => Math.random() - 0.5);
     const take = Math.min(Math.floor(guards.length * 0.5), Math.ceil(size / 2));
     guards.slice(0, take).forEach(e => e.state = 'raid');
@@ -3528,7 +4285,7 @@ Object.assign(GameScene.prototype, {
     const dx = b.x - u.spr.x, reach = U.shot ? U.range * 0.75 : b.half + 8;
     if (Math.abs(dx) < reach) {
       u.spr.setFlipX(dx < 0);
-      if (u.atk <= 0) { u.atk = U.cd; if (U.shot) this.shoot(u, b.x, null, b); else { this.meleeFx(u.spr, b.x, u.kind === 'beast' || u.kind === 'tbrute' || u.kind === 'tfiend' ? 'heavy' : 'slash'); this.damageFoeBuilding(b, U.dmg * this.dmgMul()); } }
+      if (u.atk <= 0) { u.atk = U.cd; if (U.shot) this.shoot(u, b.x, null, b); else { this.meleeFx(u.spr, b.x, u.kind === 'beast' || u.kind === 'tbrute' || u.kind === 'tfiend' || u.kind === 'uniq' ? 'heavy' : 'slash'); this.damageFoeBuilding(b, U.dmg * this.dmgMul()); } }
       this.animUnit(u, 0);
     } else this.animUnit(u, Math.sign(dx) * (Math.abs(dx) > 1400 ? (u.kind === 'siege' ? 110 : 200) : Math.abs(dx) > 600 ? (u.kind === 'siege' ? 80 : 120) : U.speed) * dt);
     return true;
@@ -3540,7 +4297,7 @@ Object.assign(GameScene.prototype, {
       b.cd = (b.cd || 0) - dt; if (b.cd > 0) continue;
       const opp = this.nearestOpp({ spr: { x: b.x }, fac: 'foe' }, 300); if (!opp) continue;
       b.cd = b.level === 2 ? 1.1 : 1.6;
-      const a = this.add.image(b.x, GROUND - b.h + 30, 'arrow').setScale(S).setDepth(9).setFlipX(opp.spr.x < b.x), dmg = b.level === 2 ? 2.2 : 1.5;
+      const a = this.add.image(b.x, GROUND - b.h + 30, 'arrow').setScale(S).setDepth(9).setFlipX(opp.spr.x < b.x), dmg = (b.level === 2 ? 2.2 : 1.5) * (opp.fac ? 1 : this.diff.dmg);
       this.tweens.add({ targets: a, x: opp.spr.x, y: GROUND - 30, duration: Math.abs(opp.spr.x - b.x) * 1.5 + 160, ease: 'Sine.in', onComplete: () => { a.destroy(); if (opp.spr && opp.spr.active) this.hurt(opp, dmg); } });
     }
   },
@@ -3553,12 +4310,204 @@ Object.assign(GameScene.prototype, {
   },
 });
 
+// ================== ГОРОД: НОВЫЕ ПЛОЩАДКИ, ХИЖИНЫ, СБОРЩИКИ НАЛОГОВ ==================
+Object.assign(GameScene.prototype, {
+  // ---------- площадки на отвоёванной земле ----------
+  // новая линия стен построена: между ней и предыдущей появляются ферма и хижина бродяг
+  addPlots(w) {
+    if (w.plots) return; w.plots = true;
+    const side = w.side, lines = WALL_LINES[String(side)], inner = this.center + side * lines[w.ring - 1], outer = w.x;
+    const busy = x => [...this.spots, ...this.huts, ...this.specials].some(o => Math.abs(o.x - x) < (o.half || 60) + 170) || this.dens.some(d => Math.abs(d.x - x) < 280);
+    const fr = [0.35, 0.55, 0.75, 0.2, 0.45, 0.65, 0.85];
+    const made = [];
+    for (const type of ['farm', 'lodge']) {
+      for (const f of fr) {
+        const x = Math.round(inner + (outer - inner) * f);
+        if (busy(x)) continue;
+        this.addSpot(type, x); made.push(type); break;
+      }
+    }
+    this.refreshStakes();
+    if (made.length) this.time.delayedCall(2600, () => { if (!this.over) this.toast(`Город вырос. На новой земле можно построить:\n${made.map(t => t === 'farm' ? 'ферму' : 'хижину бродяг').join(' и ')}`); });
+  },
+  // хижину строят рабочие; готовая превращается в обычную хижину с бродягами и добавляет 2 места
+  lodgeDone(s) {
+    if (!this.spots.includes(s)) return;
+    s.site = null;
+    if (s.scaffold) s.scaffold.destroy(); if (s.stake) s.stake.destroy();
+    if (s.building) s.building.destroy(); s.bar.destroy(); s.ui.destroy();
+    this.spots.splice(this.spots.indexOf(s), 1);
+    if (this.near === s) this.near = null; if (this.pendingAct === s) this.pendingAct = null;
+    this.addHut(s.x); this.huts[this.huts.length - 1].bonus = true;
+    this.puff(s.x, 0xcbb894); music.sfx('build');
+    this.updateHud(true);
+    this.toast(`Готово: хижина бродяг\nМест для рабочих: ${this.maxBuilders()}`);
+  },
+
+  // ---------- сборщики налогов (нанимают у казны) ----------
+  initTax() {
+    this.collectors = [];
+    const b = this.bank;
+    this.taxDesk = { isTaxDesk: true, x: b.x + 45, half: 36 };
+    this.taxDesk.img = this.add.image(this.taxDesk.x, GROUND + 2, 'taxdesk_' + this.rk).setOrigin(0.5, 1).setScale(S).setDepth(5).setVisible(false);
+    this.makeUI(this.taxDesk, 60);
+    this.specials.push(this.taxDesk);
+  },
+  taxInfo() {
+    const R = this.R;
+    if (!this.bank.level || this.bank.site) return { mode: 'none' };
+    const n = this.collectors.length;
+    if (n >= TAX_MAX) return { mode: 'info', label: `${R.tax}: ${n}/${TAX_MAX}\nсобирают монеты в городе` };
+    return { mode: 'pay', label: `Нанять: ${R.tax}  ${n}/${TAX_MAX}\nсобирает монеты в городе и несёт сюда`, cost: TAX_COST };
+  },
+  completeTax() {
+    const x = this.taxDesk.x;
+    const spr = this.add.sprite(x, GROUND, 'tax_A_' + this.rk).setOrigin(0.5, 1).setScale(S).setDepth(7).setAlpha(0);
+    this.tweens.add({ targets: spr, alpha: 1, duration: 300 });
+    const bag = this.add.image(x, GROUND - 60, 'coin').setScale(3).setDepth(9).setVisible(false);
+    const cnt = this.add.text(x, GROUND - 60, '', { ...TXT, fontSize: '14px', color: '#f2c14e', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(9);
+    this.collectors.push({ spr, bag, cnt, carry: 0, coin: null, wait: 0, ft: 0, f: 0, target: x, idx: this.collectors.length });
+    this.puff(x, 0xcbb894, 6, 16); music.sfx('coin');
+    this.updateHud(true);
+    this.toast(`${this.R.tax} вышел на службу: ${this.collectors.length}/${TAX_MAX}\nСобирает монеты между крайними стенами`);
+  },
+  updateTax(dt) {
+    const bank = this.bank, desk = this.taxDesk, on = bank.level > 0 && !bank.site;
+    desk.img.setVisible(on);
+    if (!this.collectors.length) return;
+    const [pl, pr] = this.perimeter(), unsafe = this.isNight || this.waveSent || !!this.storm;
+    const home = desk.x - 30;
+    for (const c of this.collectors) {
+      let tx = null;
+      if (c.coin && (!this.groundCoins.includes(c.coin) || c.coin.img.x < pl - 20 || c.coin.img.x > pr + 20)) c.coin = null;
+      const goHome = unsafe || c.carry >= TAX_BAG;
+      if (!goHome && !c.coin) {
+        let best = null, bd = 1e9;
+        for (const cn of this.groundCoins) {
+          const x = cn.img.x; if (x < pl - 20 || x > pr + 20) continue;
+          if (this.collectors.some(o => o !== c && o.coin === cn)) continue;
+          const d = Math.abs(x - c.spr.x); if (d < bd) { bd = d; best = cn; }
+        }
+        c.coin = best;
+      }
+      if (!goHome && c.coin) tx = c.coin.img.x;
+      else if (goHome || c.carry) tx = home + c.idx * 18;
+      else {
+        // монет нет: прогуливается у казны
+        if (c.wait > 0) { c.wait -= dt; tx = c.spr.x; }
+        else { if (Math.abs(c.target - c.spr.x) < 4) { c.wait = Phaser.Math.FloatBetween(1.5, 4); c.target = home + Phaser.Math.Between(-140, 140); } tx = c.target; }
+      }
+      const dx = tx - c.spr.x;
+      if (Math.abs(dx) > 4) {
+        const sp = Math.abs(dx) > 500 ? 170 : 95;
+        c.spr.x += Math.sign(dx) * Math.min(sp * dt, Math.abs(dx)); c.spr.setFlipX(dx < 0);
+        c.ft += dt; if (c.ft > 0.16) { c.ft = 0; c.f ^= 1; }
+      } else {
+        c.f = 0;
+        if (c.coin && !goHome && c.coin.ready) {
+          const cn = c.coin; c.coin = null;
+          this.removeGroundCoin(cn); c.carry++;
+          this.tweens.add({ targets: cn.img, y: GROUND - 60, alpha: 0, duration: 220, onComplete: () => cn.img.destroy() });
+          if (Math.abs(c.spr.x - this.player.x) < W / 2) music.sfx('coin');
+        } else if (c.carry && Math.abs(c.spr.x - home) < 60 && on) {
+          this.banked += c.carry;
+          this.flyCoin(c.spr.x, bank.x, GROUND - 60, bank.topY);
+          if (Math.abs(c.spr.x - this.player.x) < W / 2) music.sfx('deposit');
+          c.carry = 0; this.updateHud(true);
+        }
+      }
+      c.spr.setTexture(`tax_${c.f ? 'B' : 'A'}_${this.rk}`);
+      const top = c.spr.y - c.spr.displayHeight - 10;
+      c.bag.setVisible(c.carry > 0).setPosition(c.spr.x - 6, top);
+      c.cnt.setText(c.carry > 1 ? '×' + c.carry : '').setPosition(c.spr.x + 2, top);
+    }
+  },
+
+  // ---------- испуганные рабочие ----------
+  builderAt(x) { return this.builders.find(b => !b.scared && Math.abs(b.spr.x - x) < 20); },
+  // рабочий бросает дело и бежит к ближайшей хижине; там он снова бродяга, нанимать заново
+  scareBuilder(b, fromX) {
+    this.dropTask(b);
+    if (b.carryImg) { b.carryImg.destroy(); b.carryImg = null; b.carry = null; }
+    this.builders.splice(this.builders.indexOf(b), 1);
+    this.builders.forEach((o, i) => o.idx = i);
+    music.sfx('hit'); this.puff(b.spr.x, 0xcbb894, 5, 12);
+    const spr = b.spr, hut = this.huts.slice().sort((a, z) => Math.abs(a.x - spr.x) - Math.abs(z.x - spr.x))[0];
+    if (this.time.now - (this.scareToastT || -1e9) > 9000) { this.scareToastT = this.time.now; this.toast(`${this.R.builder} испугался и сбежал к бродягам\nНанять его снова можно в хижине`); }
+    this.updateHud(true);
+    if (!hut) { this.tweens.add({ targets: spr, alpha: 0, duration: 600, onComplete: () => spr.destroy() }); return; }
+    // сперва отскок от врага, потом бег к хижине
+    const away = spr.x + (spr.x >= fromX ? 1 : -1) * 40;
+    spr.setFlipX(hut.x < spr.x);
+    this.tweens.add({ targets: spr, x: away, y: GROUND - 14, duration: 180, yoyo: false, ease: 'Quad.out', onComplete: () => {
+      spr.y = GROUND; spr.setFlipX(hut.x < spr.x);
+      const run = { t: 0 };
+      this.tweens.add({ targets: spr, x: hut.x + 40, duration: Math.max(300, Math.abs(hut.x + 40 - spr.x) / 190 * 1000), ease: 'Linear',
+        onUpdate: () => { run.t++; spr.setTexture(`bld_walk${(run.t >> 3) % 2}_${this.rk}`); },
+        onComplete: () => { spr.destroy(); hut.stock++; this.addVagrant(hut); } });
+    } });
+  },
+
+  // ---------- сундуки с сокровищами: 1–3 на карте, в каждом 3–8 монет ----------
+  placeChests() {
+    this.chests = [];
+    const n = 1 + Math.floor(Math.random() * 3), ok = x => Math.abs(x - PLAYER_X) > 1500 && Math.abs(x - ENEMY_X) > 1600 && x > 500 && x < WORLD - 500
+      && this.dens.every(d => Math.abs(d.x - x) > 450) && this.huts.every(h => Math.abs(h.x - x) > 300) && this.chests.every(c => Math.abs(c.x - x) > 2500);
+    for (let tries = 0; this.chests.length < n && tries < 300; tries++) {
+      const x = Math.round(400 + Math.random() * (WORLD - 800)); if (!ok(x)) continue;
+      const img = this.add.image(x, GROUND + 2, 'chest').setOrigin(0.5, 1).setScale(S).setDepth(5);
+      const glint = this.add.image(x, GROUND - 22, 'glow_white').setScale(0.6).setBlendMode(Phaser.BlendModes.ADD).setDepth(51).setAlpha(0);
+      this.chests.push({ x, img, glint, coins: 3 + Math.floor(Math.random() * 6), open: false, ph: Math.random() * 9 });
+    }
+  },
+  updateChests(time) {
+    for (const c of this.chests) {
+      if (c.open) continue;
+      c.glint.setAlpha(Math.max(0, Math.sin(time / 500 + c.ph)) * 0.7).setPosition(c.x + Math.sin(time / 900 + c.ph) * 10, GROUND - 24);
+      if (Math.abs(this.player.x - c.x) < 34) {
+        c.open = true; c.img.setTexture('chest_open'); c.glint.destroy();
+        music.sfx('victory'); this.puff(c.x, 0xf2c14e, 10, 20, GROUND - 20);
+        for (let i = 0; i < c.coins; i++) this.time.delayedCall(i * 90, () => this.dropCoin(c.x + Phaser.Math.Between(-60, 60), true, GROUND - 70));
+        this.toast(`Сундук с сокровищами! Внутри ${c.coins} ${c.coins < 5 ? 'монеты' : 'монет'}`);
+        this.tweens.add({ targets: c.img, alpha: 0, delay: 20000, duration: 2000, onComplete: () => c.img.destroy() });
+      }
+    }
+  },
+
+  // ---------- Санта: в случайный день зимы пролетает и сбрасывает подарок на замок ----------
+  santaFlight() {
+    if (this.over || this.santa) return;
+    const hx = this.hall.x, dir = 1, x0 = hx - 1400;
+    const spr = this.add.sprite(x0, 150, 'santa_A').setOrigin(0.5).setScale(S).setDepth(30);
+    this.santa = { spr, dropped: false, t: 0 };
+    music.sfx('bells');
+    this.toast('Звенят бубенцы... Над королевством летит Санта!');
+  },
+  updateSanta(dt, time) {
+    const st = this.santa; if (!st) return;
+    const spr = st.spr, hx = this.hall.x;
+    spr.x += 190 * dt; spr.y = 150 + Math.sin(time / 400) * 10;
+    spr.setTexture(Math.floor(time / 160) % 2 ? 'santa_B' : 'santa_A');
+    st.t += dt; if (st.t > 1.3) { st.t = 0; if (Math.abs(spr.x - this.player.x) < W) music.sfx('bells'); }
+    if (!st.dropped && spr.x >= hx - 60) {
+      st.dropped = true;
+      const g = this.add.image(spr.x - 20, spr.y + 20, 'gift').setScale(S).setDepth(29), n = 2 + Math.floor(Math.random() * 4);
+      this.tweens.add({ targets: g, x: hx, y: GROUND - 10, angle: 200, duration: 1500, ease: 'Quad.in', onComplete: () => {
+        g.destroy(); this.puff(hx, 0xe04a4a, 12, 30, GROUND - 14); music.sfx('coin');
+        for (let i = 0; i < n; i++) this.time.delayedCall(i * 100, () => this.dropCoin(hx + Phaser.Math.Between(-50, 50), true, GROUND - 60));
+        this.toast(`Санта сбросил подарок у замка: ${n} ${n < 5 ? 'монеты' : 'монет'}!`);
+      } });
+    }
+    if (spr.x > hx + 1600) { spr.destroy(); this.santa = null; }
+  },
+});
+
 // ================== ЗАПУСК ==================
 const config = {
   type: Phaser.CANVAS, parent: 'game', width: W, height: H, backgroundColor: '#22333b',
   pixelArt: true, roundPixels: true,
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: [SelectScene, GameScene],
+  scene: [TitleScene, SelectScene, HowScene, SettingsScene, GameScene],
 };
 const start = () => { if (!window.__game) window.__game = new Phaser.Game(config); };
 const fontReady = document.fonts
