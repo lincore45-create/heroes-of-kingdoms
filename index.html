@@ -50,8 +50,8 @@
 // а не чёрные полосы по бокам. Берётся альбомная ориентация, пропорции от 16:9 до 2,4:1.
 const SCREEN_K = (() => { try { const a = Math.max(innerWidth, innerHeight), b = Math.min(innerWidth, innerHeight); return b > 0 ? Math.min(2.4, Math.max(16 / 9, a / b)) : 16 / 9; } catch (e) { return 16 / 9; } })();
 const H = 810, W = Math.round(H * SCREEN_K / 2) * 2;   // внутреннее разрешение мира (1440×810 при 16:9)
-const GROUND = 570;              // линия земли, на ней всё стоит
-const BANK = 599;                // где берег переходит в воду
+const GROUND = 500;              // линия земли, на ней всё стоит
+const BANK = 529;                // где берег переходит в воду
 // Интерфейс и меню рисуются в прежних координатах 1152×648 и увеличиваются в UI раз
 const UH = 648, UI = H / UH, UW = Math.round(W / UI), UGROUND = 456, UBANK = 485;
 const RH = H - BANK;             // высота полосы воды
@@ -276,14 +276,43 @@ function paintTex(scene, key, w, h, fn) {
   if (hd && (HD_SIZE[pre] || pre[0] === 'a')) { w = hd[0]; h = hd[1]; }
   else if (HIRES > 1 && HIRES_RE.test(key) && typeof document !== 'undefined') {
     const src = document.createElement('canvas'); src.width = w; src.height = h;
-    const sctx = src.getContext('2d'); fn(mkPainter(sctx, w, h), sctx);
+    const sctx = src.getContext('2d'); fn(mkPainter(sctx, w, h), sctx); gradeCanvas(sctx, w, h, key);
     const out = hiResCanvas(src, HIRES), t = scene.textures.createCanvas(key, out.width, out.height);
     t.getContext().drawImage(out, 0, 0); t.refresh();
     return;
   }
   const t = scene.textures.createCanvas(key, w, h), ctx = t.getContext();
-  fn(mkPainter(ctx, w, h), ctx);
+  fn(mkPainter(ctx, w, h), ctx); gradeCanvas(ctx, w, h, key);
   t.refresh();
+}
+// ---------- общая палитра ----------
+// Все краски мира сводятся к единой гамме: насыщенность приглушена, зелень уведена в оливковую,
+// тени холодные лиловые, света тёплые. Яркие акценты (огонь, золото, магия) приглушаются меньше.
+const GRADE_SKIP = /^(glow|bcloud|sun|moon|vignette|orb|fireball|gift|coin|crystal|skygrad|hazeg|reflect|hud|ico)/;
+const GRADE_CACHE = new Map();
+function gradeRGB(r, g, b) {
+  const key = (r << 16) | (g << 8) | b; let v = GRADE_CACHE.get(key); if (v !== undefined) return v;
+  const R = r / 255, G = g / 255, B = b / 255, mx = Math.max(R, G, B), mn = Math.min(R, G, B), l = (mx + mn) / 2, d = mx - mn;
+  let h = 0, s = 0;
+  if (d > 1e-6) { s = d / (1 - Math.abs(2 * l - 1)); h = mx === R ? ((G - B) / d) % 6 : mx === G ? (B - R) / d + 2 : (R - G) / d + 4; h *= 60; if (h < 0) h += 360; }
+  const accent = s > 0.55 && l > 0.45;
+  s *= accent ? 0.9 : 0.78;
+  if (h > 75 && h < 170) h += (98 - h) * 0.22;           // зелень — к оливковой
+  else if (h > 170 && h < 260) h += (212 - h) * 0.15;   // синева — к спокойной
+  const c = (1 - Math.abs(2 * l - 1)) * s, x = c * (1 - Math.abs((h / 60) % 2 - 1)), m = l - c / 2;
+  let [r1, g1, b1] = h < 60 ? [c, x, 0] : h < 120 ? [x, c, 0] : h < 180 ? [0, c, x] : h < 240 ? [0, x, c] : h < 300 ? [x, 0, c] : [c, 0, x];
+  r1 += m; g1 += m; b1 += m;
+  if (l < 0.36) { const t = (0.36 - l) * 0.55; r1 += (0.16 - r1) * t; g1 += (0.15 - g1) * t; b1 += (0.25 - b1) * t; }
+  else if (l > 0.66 && !accent) { const t = (l - 0.66) * 0.3; r1 += (1 - r1) * t; g1 += (0.93 - g1) * t; b1 += (0.8 - b1) * t; }
+  v = (Math.round(Math.min(1, Math.max(0, r1)) * 255) << 16) | (Math.round(Math.min(1, Math.max(0, g1)) * 255) << 8) | Math.round(Math.min(1, Math.max(0, b1)) * 255);
+  GRADE_CACHE.set(key, v); return v;
+}
+const gradeInt = c => gradeRGB((c >> 16) & 255, (c >> 8) & 255, c & 255);
+function gradeCanvas(ctx, w, h, key) {
+  if (!key || GRADE_SKIP.test(key) || w * h === 0) return;
+  const img = ctx.getImageData(0, 0, w, h), d = img.data;
+  for (let i = 0; i < d.length; i += 4) { if (!d[i + 3]) continue; const v = gradeRGB(d[i], d[i + 1], d[i + 2]); d[i] = v >> 16; d[i + 1] = (v >> 8) & 255; d[i + 2] = v & 255; }
+  ctx.putImageData(img, 0, 0);
 }
 function gridTex(scene, key, rows, pal) {
   paintTex(scene, key, Math.max(...rows.map(r => r.length)), rows.length, P => P.grid(rows, pal));
@@ -3396,6 +3425,237 @@ function buildBiomeTextures(scene) {
   paintTex(scene, 'stormcloud', 64, 24, P => paintStormCloud(P, 64, 24));
 }
 
+// ================== ЛИСТВА ИЗ КЛАСТЕРОВ И КРУПНЫЕ ОРИЕНТИРЫ ==================
+// Крона собирается из множества клубков листвы; у каждого освещённый верх слева, тень снизу справа.
+// Эти функции заменяют прежние одноимённые (paintTree, paintPine, paintBush, paintBirch, paintSpruce).
+const leafPal = pal => ({ ...pal, L: mix(pal.G, '#fff4d0', 0.28), D: mix(pal.d, '#141020', 0.35) });
+function clump(P, cx, cy, r, q, rnd, low) {
+  P.ell(cx, cy, r, r * 0.86, (x, y, nx, ny) => {
+    const b = -nx * 0.55 - ny * 0.85, rim = nx * nx + ny * ny > 0.72;
+    if (b > 0.6) return rnd() < 0.18 ? q.L : q.G;
+    if (b > -0.1) return rim && b < 0.15 ? q.d : (rnd() < 0.06 ? q.d : q.g);
+    return low || rnd() < 0.3 ? q.D : q.d;
+  });
+}
+function paintTree(P, w, h, pal, seed, s) {
+  const R0 = rng(seed), k = w / 24, cx = w / 2, q = leafPal(pal);
+  // ствол с корнями и ветвями
+  const tw = Math.max(2, Math.round(3 * k)), th = Math.round(15 * k);
+  P.rect(Math.floor(cx - tw / 2), h - th, tw, th, pal.t); P.rect(Math.floor(cx - tw / 2), h - th, 1, th, pal.t2);
+  P.px(Math.floor(cx - tw / 2) - 1, h - 1, pal.t); P.px(Math.floor(cx + tw / 2), h - 1, pal.t); P.px(Math.floor(cx + tw / 2) + 1, h - 1, pal.t);
+  P.line(cx, h - th + 2, cx - 6 * k, h - th - 4 * k, pal.t); P.line(cx, h - th + 1, cx + 5 * k, h - th - 6 * k, pal.t);
+  if (s === 3) {
+    const br = (x, y, len, ang, d) => {
+      if (d > 4 || len < 2) return;
+      const x2 = x + Math.cos(ang) * len, y2 = y - Math.sin(ang) * len;
+      P.line(x, y, x2, y2, d < 2 ? pal.t : pal.t2);
+      if (d > 1) P.px(x2, y2 - 1, SNOW);
+      br(x2, y2, len * 0.72, ang + 0.45 + R0() * 0.2, d + 1); br(x2, y2, len * 0.68, ang - 0.5 - R0() * 0.2, d + 1);
+    };
+    br(cx, h - 12 * k, 8 * k, Math.PI / 2, 0);
+    return;
+  }
+  // тень-масса кроны, затем клубки сверху вниз
+  const ccy = h - th - 9 * k, rx = w * 0.44, ry = (h - th) * 0.5;
+  P.ell(cx, ccy + 1, rx * 0.86, ry * 0.8, q.D);
+  const cl = [];
+  for (let i = 0; i < 20; i++) {
+    const a = R0() * Math.PI * 2, rr = Math.sqrt(R0());
+    cl.push([cx + Math.cos(a) * rx * rr * 0.78, ccy + Math.sin(a) * ry * rr * 0.72, (2.6 + R0() * 2.4) * k]);
+  }
+  cl.push([cx, ccy - ry * 0.55, 4 * k], [cx - rx * 0.5, ccy - ry * 0.15, 3.6 * k], [cx + rx * 0.55, ccy, 3.6 * k]);
+  cl.sort((a, b) => a[1] - b[1]);
+  for (const [x, y, r] of cl) clump(P, x, y, r, q, R0, y > ccy + ry * 0.35);
+  if (pal.acc) { const n = s === 2 ? 14 : (seed % 3 === 0 ? 7 : 0); for (let i = 0; i < n; i++) { const [x, y, r] = cl[Math.floor(R0() * cl.length)]; P.px(x - r * 0.3 + R0() * r * 0.4, y - r * 0.4, pal.acc); } }
+}
+// хвойное: ярусы свисающих лап с зубчатым краем
+function paintConifer(P, w, h, pal, s, narrow) {
+  const cx = Math.floor(w / 2), q = leafPal({ g: pal.g, G: pal.G, d: pal.d });
+  P.rect(cx - 1, h - 6, 2, 6, pal.t || '#2a1f17');
+  const tiers = narrow ? Math.max(5, Math.floor(h / 9)) : 5, top = 1, span = h - 6 - top;
+  for (let i = 0; i < tiers; i++) {
+    const t0 = top + span * i / tiers, th = span / tiers + (narrow ? 4 : 5), maxHalf = (w / 2 - 0.5) * (narrow ? (0.3 + 0.7 * (i + 1) / tiers) : (0.25 + 0.75 * (i + 1) / tiers));
+    for (let y = 0; y < th; y++) {
+      const half = Math.max(0.5, (y + 1) / th * maxHalf);
+      for (let x = Math.floor(cx - half); x < Math.ceil(cx + half); x++) {
+        // зубчатый нижний край: кончики лап свисают
+        if (y > th - 3 && ((x + i) % 3 !== 0) && Math.abs(x - cx) > half * 0.35) continue;
+        const rel = (x - cx) / half;
+        let c = rel < -0.3 ? q.G : rel > 0.45 ? q.d : q.g;
+        if (y < 2 && rel < 0.1 && i > 0) c = q.D;          // тень от верхнего яруса
+        if (y === Math.floor(th * 0.5) && rel < -0.4) c = q.L;
+        if (rel > 0.75 || y >= th - 1) c = q.D;
+        if (s === 3 && (y < 2 || (rel < -0.2 && y < th * 0.45 && (x + y) % 3 === 0))) c = y === 0 || rel < 0 ? SNOW : SNOW2;
+        P.px(x, Math.floor(t0 + y), c);
+      }
+    }
+  }
+  P.px(cx, 0, s === 3 ? SNOW : q.G);
+}
+function paintPine(P, w, h, pal, s) { paintConifer(P, w, h, pal, s, false); }
+function paintSpruce(P, w, h, pal, s) { paintConifer(P, w, h, pal, s, true); }
+function paintBush(P, s, berries, empty) {
+  const R0 = rng(9), w = 19, h = berries ? 12 : 11;
+  const C = [['#5a8a4a', '#3a6040', '#24402e'], ['#557a48', '#365a3e', '#22402e'], ['#b8802e', '#8a5426', '#5a3418'], [SNOW, SNOW2, SNOW3]][s];
+  const q = leafPal({ G: C[0], g: C[1], d: C[2] });
+  P.ell(9.5, h - 4, 9, 4, q.D);
+  for (const [x, y, r] of [[5, h - 4, 3.6], [10, h - 6, 4.4], [14.5, h - 4, 3.6], [8, h - 3, 3.4], [12, h - 3, 3.2]]) clump(P, x, y, r, q, R0, y > h - 4);
+  if (s === 3) { for (let x = 3; x < 16; x += 3) P.px(x, h - 1, '#3a3238'); return; }
+  if (berries && !empty) for (const [x, y, c] of [[4, 5, '#c0392b'], [5, 6, '#e05040'], [10, 4, '#3a4f9e'], [11, 5, '#3a4f9e'], [13, 7, '#c0392b'], [7, 7, '#3a4f9e'], [14, 5, '#e05040'], [6, 3, '#c0392b'], [9, 8, '#c0392b']]) P.px(x, y, c);
+  if (!berries && s === 0) for (const [x, y] of [[4, 4], [10, 3], [14, 6]]) P.px(x, y, '#f0b8c8');
+  if (!berries && s === 1) for (const [x, y] of [[4, 5], [9, 4], [13, 6]]) P.px(x, y, '#b8463a');
+}
+function paintBirch(P, w, h, s) {
+  const R0 = rng(31), k = w / 18;
+  P.rect(Math.round(8 * k), Math.round(12 * k), 2, h - Math.round(12 * k), '#e9e6dc'); P.rect(Math.round(8 * k) + 1, Math.round(12 * k), 1, h - Math.round(12 * k), '#c8c2b4');
+  for (let y = Math.round(14 * k); y < h; y += 3) P.px(Math.round(8 * k) + (y % 2), y, '#2a2a2a');
+  P.line(Math.round(9 * k), Math.round(20 * k), Math.round(12 * k), Math.round(16 * k), '#e9e6dc');
+  if (s === 3) {
+    P.line(Math.round(8 * k), Math.round(14 * k), Math.round(4 * k), Math.round(6 * k), '#cfcac0'); P.line(Math.round(9 * k), Math.round(13 * k), Math.round(13 * k), Math.round(5 * k), '#cfcac0');
+    P.line(Math.round(9 * k), Math.round(12 * k), Math.round(9 * k), Math.round(3 * k), '#cfcac0');
+    P.px(Math.round(4 * k), Math.round(6 * k) - 1, SNOW); P.px(Math.round(13 * k), Math.round(5 * k) - 1, SNOW); P.px(Math.round(9 * k), Math.round(3 * k) - 1, SNOW);
+    return;
+  }
+  const L = [['#8ab84a', '#62903a', '#3f5a2a'], ['#7aa448', '#557a38', '#3a5428'], ['#e8c850', '#c8a030', '#8a6420']][s], q = leafPal({ G: L[0], g: L[1], d: L[2] });
+  const cl = [];
+  for (let i = 0; i < 14; i++) cl.push([(4 + R0() * 10) * k, (3 + R0() * 12) * k, (1.8 + R0() * 1.8) * k]);
+  cl.sort((a, b) => a[1] - b[1]);
+  for (const [x, y, r] of cl) clump(P, x, y, r, q, R0, y > 12 * k);
+}
+
+// ---------------------------------------------------------------- ОРИЕНТИРЫ
+// Крупные силуэты на дальнем плане, по два вида на биом. Зимой на верхних гранях лежит снег.
+const LM_STONE = { L: '#c8c0ae', l: '#aaa290', m: '#8e8676', d: '#6e6858', D: '#4e4a42' };
+const shadeX = (nx, c = LM_STONE) => nx < -0.45 ? c.L : nx < -0.1 ? c.l : nx < 0.35 ? c.m : nx < 0.7 ? c.d : c.D;
+function snowCap(P, w, h, s, thick = 2) {
+  if (s !== 3) return;
+  const d = P.ctx.getImageData(0, 0, w, h).data, op = (x, y) => y >= 0 && d[(y * w + x) * 4 + 3] > 0;
+  for (let x = 0; x < w; x++) for (let y = 0; y < h; y++) if (op(x, y) && !op(x, y - 1)) { for (let t = 0; t < thick; t++) if (op(x, y + t)) P.px(x, y + t, t ? SNOW2 : SNOW); }
+}
+const mossOn = (P, w, h, s, seed, n = 40) => {
+  if (s === 3) return; const R0 = rng(seed), c = s === 2 ? ['#7a6a34', '#8a7a3a'] : ['#4f6b3a', '#5f7f44'];
+  const d = P.ctx.getImageData(0, 0, w, h).data;
+  for (let i = 0; i < n; i++) { const x = Math.floor(R0() * w), y = Math.floor(h * 0.45 + R0() * h * 0.55); if (d[(y * w + x) * 4 + 3]) { P.px(x, y, c[i % 2]); if (d[(y * w + x + 1) * 4 + 3]) P.px(x + 1, y, c[0]); } }
+};
+// лес: колосс — каменный король с мечом
+function paintColossus(P, w, h, s) {
+  const S0 = LM_STONE, cx = w / 2;
+  P.rect(cx - 20, h - 13, 40, 13, S0.m); P.rect(cx - 20, h - 13, 40, 2, S0.L); P.rect(cx + 12, h - 11, 8, 11, S0.d);
+  for (let x = cx - 20; x < cx + 20; x += 8) P.rect(x, h - 11, 1, 11, S0.D);
+  P.rect(cx - 22, h - 16, 44, 3, S0.l); P.rect(cx - 22, h - 14, 44, 1, S0.d);
+  // плащ за спиной
+  P.poly([[cx - 13, 30], [cx + 13, 30], [cx + 17, h - 16], [cx - 17, h - 16]], (x) => shadeX((x - cx) / 17, { ...S0, L: S0.l, l: S0.m }));
+  // мантия
+  P.poly([[cx - 9, 50], [cx + 9, 50], [cx + 14, h - 16], [cx - 14, h - 16]], (x) => shadeX((x - cx) / 14));
+  for (const fx of [-6, -1, 5]) P.line(cx + fx, 56, cx + fx * 1.4, h - 17, S0.d);
+  // торс, наплечники
+  P.poly([[cx - 10, 30], [cx + 10, 30], [cx + 9, 52], [cx - 9, 52]], (x) => shadeX((x - cx) / 10));
+  P.poly([[cx - 15, 30], [cx - 9, 29], [cx - 8, 34], [cx - 15, 35]], S0.L); P.poly([[cx + 9, 29], [cx + 15, 30], [cx + 15, 35], [cx + 8, 34]], S0.d);
+  // руки, согнутые к рукояти
+  P.line(cx - 13, 34, cx - 13, 41, S0.l, 4); P.line(cx - 12, 42, cx - 4, 44, S0.l, 4); P.line(cx + 11, 34, cx + 11, 41, S0.d, 4); P.line(cx + 11, 42, cx + 3, 44, S0.m, 4);
+  P.rect(cx - 9, 48, 18, 2, S0.d);
+  // меч остриём вниз, руки на рукояти
+  P.rect(cx - 1, 50, 3, h - 66, S0.L); P.rect(cx + 1, 50, 1, h - 66, S0.d); P.rect(cx - 7, 48, 15, 2, S0.l); P.rect(cx - 7, 49, 15, 1, S0.D);
+  P.ell(cx + 0.5, 44, 2.5, 2, S0.l); P.rect(cx - 4, 42, 9, 4, S0.m); P.rect(cx - 4, 42, 4, 2, S0.L);
+  // голова, борода, корона с отбитым зубцом
+  P.ell(cx, 19, 7, 8.5, (x, y, nx) => shadeX(nx));
+  P.poly([[cx - 6, 21], [cx + 6, 21], [cx + 4, 32], [cx, 35], [cx - 4, 32]], (x) => shadeX((x - cx) / 6 + 0.1));
+  for (let y = 24; y < 34; y += 3) P.line(cx - 3, y, cx + 3, y, S0.d);
+  P.rect(cx - 4, 18, 2, 1, S0.D); P.rect(cx + 2, 18, 2, 1, S0.D); P.rect(cx, 19, 1, 3, S0.d);
+  P.rect(cx - 7, 11, 14, 3, S0.l); P.rect(cx - 7, 13, 14, 1, S0.d);
+  for (const [x, t] of [[-7, 5], [-3, 6], [1, 6], [5, 3]]) P.rect(cx + x, 11 - t, 2, t, x < 0 ? S0.L : S0.m);
+  P.px(cx - 6, 25, S0.D); P.px(cx + 8, 60, S0.D); P.line(cx + 6, 70, cx + 9, 80, S0.D);
+  mossOn(P, w, h, s, 21, 70); snowCap(P, w, h, s);
+}
+// лес: руины колоннады с аркой
+function paintRuinArch(P, w, h, s) {
+  const S0 = LM_STONE, base = h - 4;
+  P.rect(0, base, w, 4, S0.d); P.rect(0, base, w, 1, S0.l);
+  const col = (x, top, cw = 9) => { for (let xx = 0; xx < cw; xx++) P.rect(x + xx, top, 1, base - top, shadeX(xx / (cw - 1) * 2 - 1)); for (let y = top + 3; y < base; y += 7) P.rect(x, y, cw, 1, S0.d); P.rect(x - 2, top - 3, cw + 4, 3, S0.l); P.rect(x - 2, top - 1, cw + 4, 1, S0.D); P.rect(x - 1, base - 3, cw + 2, 3, S0.m); };
+  col(8, 14); col(w - 30, 30); col(w - 16, 48, 8);
+  // арка: дуга из блоков между колоннами
+  const ax = 8 + 4.5, bx = w - 30 + 4.5, mx = (ax + bx) / 2, rr = (bx - ax) / 2;
+  for (let a = Math.PI; a < Math.PI * 1.62; a += 0.02) for (let t = 0; t < 7; t++) { const R = rr + t; P.px(mx + Math.cos(a) * R, 14 + Math.sin(a) * R * 0.75 + rr * 0.75 - 3, t < 2 ? S0.L : t > 5 ? S0.D : ((Math.floor(a * 18)) % 3 ? S0.m : S0.d)); }
+  // обломки
+  for (const [x, y, bw, bh] of [[w * 0.42, base - 6, 10, 6], [w * 0.55, base - 4, 7, 4], [w - 8, base - 7, 8, 7]]) { P.rect(x, y, bw, bh, S0.m); P.rect(x, y, bw, 1, S0.L); P.rect(x + bw - 2, y, 2, bh, S0.d); }
+  // лоза
+  if (s < 3) for (let y = 12; y < base; y += 2) { P.px(8 + (y % 4 ? 0 : 1), y, s === 2 ? '#8a6a30' : '#4f7a3a'); if (y % 6 === 0) P.px(7, y, s === 2 ? '#a07a38' : '#6a9a48'); }
+  mossOn(P, w, h, s, 33, 60); snowCap(P, w, h, s);
+}
+// степь: каменная арка
+function paintRockArch(P, w, h, s) {
+  const C = { L: '#e0b088', l: '#c89470', m: '#ac7a5a', d: '#8a5e46', D: '#64443a' };
+  const inside = (x, y) => { const nx = (x - w / 2) / (w * 0.27), ny = (y - h) / (h * 0.62); return nx * nx + ny * ny < 1; };
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const ox = (x - w / 2) / (w / 2), oy = (y - h) / (h * 0.98), out = ox * ox * 0.9 + oy * oy;
+    const edge = 0.95 + Math.sin(x * 0.7) * 0.03 + Math.sin(y * 0.9 + x * 0.2) * 0.03;
+    if (out > edge || inside(x, y)) continue;
+    const band = Math.floor((y + Math.sin(x * 0.15) * 2) / 5) % 3;
+    let c = shadeX(ox * 0.9 + 0.1, C); if (band === 1) c = mix(c, C.D, 0.18); if (band === 2) c = mix(c, C.L, 0.1);
+    if (inside(x, y + 2) || inside(x - 2, y)) c = C.D;      // тень внутри проёма
+    P.px(x, y, c);
+  }
+  for (const [x, y, r] of [[8, h - 3, 4], [w - 10, h - 3, 5], [w * 0.3, h - 2, 3]]) P.ell(x, y, r, r * 0.7, (xx, yy, nx) => shadeX(nx, C));
+  snowCap(P, w, h, s);
+}
+// степь: скелет исполина
+function paintRibcage(P, w, h, s) {
+  const B1 = '#e6dcc4', B2 = '#c4b89c', B3 = '#8e8470', base = h - 3;
+  P.rect(0, base, w, 3, '#a08060'); P.rect(0, base, w, 1, '#b8946c');
+  // хребет дугой
+  for (let x = 18; x < w - 4; x++) { const y = base - 6 - Math.sin((x - 18) / (w - 22) * Math.PI) * 8; P.rect(x, y, 1, 3, x % 4 ? B2 : B1); P.px(x, y + 3, B3); }
+  // рёбра
+  for (let i = 0; i < 7; i++) {
+    const x0 = 26 + i * ((w - 36) / 7), y0 = base - 6 - Math.sin((x0 - 18) / (w - 22) * Math.PI) * 8, hh = (h - 14) * (1 - Math.abs(i - 2.5) / 6);
+    for (let t = 0; t <= 1; t += 0.02) { const x = x0 + Math.sin(t * Math.PI) * 9 - t * 3, y = y0 - t * hh; P.rect(x, y, 2, 1, t < 0.5 ? B1 : B2); P.px(x + 2, y, B3); }
+  }
+  // череп с рогом
+  P.ell(11, base - 9, 10, 7, (x, y, nx, ny) => ny < -0.3 ? B1 : nx > 0.4 ? B3 : B2);
+  P.rect(2, base - 6, 12, 5, B2); P.rect(3, base - 4, 1, 2, B3); P.rect(6, base - 4, 1, 2, B3); P.rect(9, base - 4, 1, 2, B3);
+  P.ell(9, base - 10, 2.5, 2, '#3a2a24'); P.line(14, base - 15, 22, base - 22, B1); P.line(15, base - 14, 23, base - 21, B3); P.px(23, base - 23, B1);
+  snowCap(P, w, h, s);
+}
+// север: голова каменного великана
+function paintStoneHead(P, w, h, s) {
+  const S0 = { L: '#b8bcc0', l: '#9ca2a8', m: '#80878e', d: '#646b72', D: '#484e56' }, cx = w / 2, base = h - 2;
+  P.ell(cx, base, w / 2 - 1, 8, (x, y, nx) => shadeX(nx, S0));
+  // шлем-купол
+  P.ell(cx, 30, 24, 24, (x, y, nx, ny) => ny > 0.25 ? null : shadeX(nx, S0));
+  P.rect(cx - 25, 34, 50, 4, S0.l); P.rect(cx - 25, 37, 50, 1, S0.D); P.rect(cx - 2, 8, 4, 26, S0.d);
+  for (let x = cx - 22; x < cx + 22; x += 6) P.px(x, 35, S0.D);
+  // лицо
+  P.poly([[cx - 18, 38], [cx + 18, 38], [cx + 16, 56], [cx - 16, 56]], (x) => shadeX((x - cx) / 18, S0));
+  P.rect(cx - 13, 42, 9, 2, S0.D); P.rect(cx + 4, 42, 9, 2, S0.D);
+  P.poly([[cx - 3, 40], [cx + 3, 40], [cx + 5, 52], [cx - 5, 52]], (x) => shadeX((x - cx) / 5 - 0.2, S0));
+  // усы и борода, уходящие в землю
+  P.poly([[cx - 16, 52], [cx + 16, 52], [cx + 20, base], [cx - 20, base]], (x) => shadeX((x - cx) / 20 + 0.1, S0));
+  for (let x = cx - 16; x < cx + 17; x += 4) P.line(x, 55, x + (x < cx ? -2 : 2), base - 1, S0.d);
+  P.poly([[cx - 12, 51], [cx, 53], [cx + 12, 51], [cx + 14, 55], [cx, 56], [cx - 14, 55]], S0.D);
+  P.px(cx - 10, 47, S0.D); P.line(cx + 9, 25, cx + 13, 33, S0.D);
+  mossOn(P, w, h, s, 41, 60); snowCap(P, w, h, s, 3);
+}
+// север: дольмен и рунные камни
+function paintDolmen(P, w, h, s) {
+  const S0 = { L: '#a8b0b4', l: '#8e979c', m: '#747d84', d: '#5c646a', D: '#41484e' }, base = h - 2, rune = '#9ad8ff';
+  P.rect(0, base, w, 2, S0.d);
+  const stone = (x, top, sw) => { for (let xx = 0; xx < sw; xx++) { const t = Math.floor(Math.abs(xx - sw / 2) / (sw / 2) * 2); P.rect(x + xx, top + t, 1, base - top - t, shadeX(xx / (sw - 1) * 2 - 1, S0)); } };
+  stone(4, 22, 9); stone(w - 14, 18, 10); stone(w * 0.42, 14, 11); stone(w * 0.6, 16, 9);
+  // плита сверху
+  P.poly([[w * 0.38, 12], [w * 0.68, 10], [w * 0.7, 15], [w * 0.36, 17]], (x) => shadeX((x - w * 0.53) / (w * 0.17), S0)); P.line(w * 0.36, 17, w * 0.7, 15, S0.D);
+  // руны
+  for (const [x, y] of [[7, 30], [w - 10, 26], [w * 0.47, 22], [w * 0.47, 32]]) { P.line(x, y, x, y + 6, S0.D); P.line(x, y + 2, x + 2, y, S0.D); P.line(x, y + 4, x - 2, y + 2, S0.D); }
+  P.px(w * 0.47, 22, rune);
+  mossOn(P, w, h, s, 51, 50); snowCap(P, w, h, s);
+}
+const LANDMARKS = {
+  forest: [['lm_colossus', 60, 112, paintColossus], ['lm_ruin', 96, 70, paintRuinArch]],
+  steppe: [['lm_rockarch', 120, 86, paintRockArch], ['lm_ribs', 112, 50, paintRibcage]],
+  north: [['lm_head', 70, 66, paintStoneHead], ['lm_dolmen', 100, 60, paintDolmen]],
+};
+function buildLandmarkTextures(scene) {
+  for (const b in LANDMARKS) for (const [key, w, h, fn] of LANDMARKS[b]) for (let s = 0; s < 4; s++) paintTex(scene, `${key}@${s}`, w, h, P => fn(P, w, h, s));
+}
+
 // ================== МУЗЫКА И ЗВУКИ ==================
 // Всё играется синтезатором браузера. Тема одна и та же, но каждый круг
 // (32 шага) получает новую аранжировку: от народа, сезона и случая.
@@ -3636,8 +3896,10 @@ function buildAllTextures(scene) {
   buildNatureTextures(scene);
   buildNewTextures(scene);
   buildBiomeTextures(scene);
+  buildLightTextures(scene);
+  buildLandmarkTextures(scene);
 }
-const GAME_VERSION = 'v0.13.4';
+const GAME_VERSION = 'v0.15';
 // Сложность: lazy — логова выпускают волны через ночь; dmg — урон чудовищ и вражеских воинов; raid — размер набегов
 const DIFFS = {
   easy:   { name: 'Лёгкая',  lazy: true,  dmg: 0.75, raid: 1,    desc: 'логова нападают через ночь, враги бьют на четверть слабее' },
@@ -4048,7 +4310,7 @@ class GameScene extends Phaser.Scene {
     this.drawBackdrop();
 
     this.fire = this.add.image(c, GROUND + 1, 'fire_0').setOrigin(0.5, 1).setScale(S).setDepth(6);
-    this.glow = this.add.image(c, GROUND - 24, 'glow').setScale(3.2).setBlendMode(Phaser.BlendModes.ADD).setDepth(51);
+    this.glow = this.add.image(c, GROUND - 24, 'glow').setScale(2.4).setBlendMode(Phaser.BlendModes.ADD).setDepth(51);
     this.fireT = 0; this.fireF = 0; this.smokeT = 0;
 
     for (const key in SPOTS) this[key] = this.addSpot(key, c + SPOTS[key], key === 'hall');
@@ -4082,6 +4344,7 @@ class GameScene extends Phaser.Scene {
     this.vignette = this.add.image(0, 0, 'vignette').setOrigin(0).setScrollFactor(0).setDepth(90).setAlpha(0);
     this.flash = this.add.rectangle(0, 0, W, H, 0xeef4ff).setOrigin(0).setScrollFactor(0).setDepth(95).setAlpha(0);
     this.NIGHT = new Phaser.Display.Color(22, 32, 50);
+    this.buildSkyLayers();
 
     // интерфейс
     const hud = o => o.setScrollFactor(0).setDepth(100).setScale(o.scaleX * UI, o.scaleY * UI).setPosition(o.x * UI, o.y * UI);
@@ -4120,7 +4383,7 @@ class GameScene extends Phaser.Scene {
 
   // солнце и луна идут по дуге: восходят слева, заходят справа за горы
   placeSky() {
-    const a = this.dayT * Math.PI * 2, R = W * 0.47, top = 170, hor = GROUND - 40;
+    const a = this.dayT * Math.PI * 2, R = W * 0.38, top = 64, hor = 200;
     const put = (o, ang) => { const x = W / 2 + Math.sin(ang) * R, y = hor - (hor - top) * Math.cos(ang); o.setPosition(x, y); return y < hor + 30; };
     const sv = put(this.sun, a); this.sunGlow.setPosition(this.sun.x, this.sun.y).setVisible(sv); this.sun.setVisible(sv);
     { const dim = this.storm || this.thunder || this.tornado; this.sun.setAlpha(dim ? 0.35 : 1); this.sunGlow.setAlpha(dim ? 0.1 : 0.8); }
@@ -4164,8 +4427,8 @@ class GameScene extends Phaser.Scene {
     // средний ярус леса: деревья поменьше и в дымке, между дальним лесом и ближним
     const midLen = 0.8 * (WORLD - W) + W;
     for (let x = 0; x < midLen; x += (this.biome === 'steppe' ? 90 : 40) + Math.floor(R0() * (this.biome === 'steppe' ? 140 : 70))) {
-      const key = this.bk('mid', R0(), R0());
-      this.seas(this.add.image(x, GROUND + 3, key + '@0').setOrigin(0.5, 1).setScale(2).setScrollFactor(0.8).setDepth(-13).setAlpha(0.55).setFlipX(R0() < 0.5), key, 0.8);
+      const key = this.bk('mid', R0(), R0()) + '_m';
+      this.seas(this.add.image(x, GROUND + 3, key + '@0').setOrigin(0.5, 1).setScale(S).setScrollFactor(0.8).setDepth(-13).setAlpha(0.55).setFlipX(R0() < 0.5), key, 0.8);
     }
     this.ground = this.add.tileSprite(0, GROUND - 3, WORLD, BANK - GROUND + 3, this.groundKey(0)).setOrigin(0).setDepth(-5);
     this.add.tileSprite(c - 880, GROUND + 3, 1760, 12, 'path').setOrigin(0).setDepth(-4);
@@ -4178,7 +4441,7 @@ class GameScene extends Phaser.Scene {
       if (Math.abs(x - c) < 1000 || nearDen(x) || nearHut(x)) continue;
       const r = R0();
       const key = denZone(x) ? this.bk('den', r, 0) : this.bk('near', r, R0());
-      this.seas(this.add.image(x, GROUND + 3, key + '@0').setOrigin(0.5, 1).setScale(S + (R0() < 0.4 ? 1 : 0)).setDepth(-8).setFlipX(R0() < 0.5), key).tree = true;
+      this.seas(this.add.image(x, GROUND + 3, key + '@0').setOrigin(0.5, 1).setScale(S).setDepth(-8).setFlipX(R0() < 0.5), key).tree = true;
     }
     for (let x = 0; x < WORLD; x += 40 + Math.floor(R0() * 110)) {
       const r = R0();
@@ -4203,10 +4466,10 @@ class GameScene extends Phaser.Scene {
       t.ph = R0() * 6; this.sway.push(t);
     }
     for (let x = 0; x < WORLD; x += 30 + Math.floor(R0() * 120))
-      this.seas(this.add.image(x, BANK + 9, 'reeds@0').setOrigin(0.5, 1).setScale(S).setDepth(53).setFlipX(R0() < 0.5), 'reeds');
+      this.seas(this.add.image(x, BANK + 9, 'reeds@0').setOrigin(0.5, 1).setScale(S).setDepth(48.8).setFlipX(R0() < 0.5), 'reeds');
     for (let x = 0; x < WORLD; x += 120 + Math.floor(R0() * 300)) {
       const k = R0() < 0.3 ? 'lily_f' : 'lily';
-      this.seas(this.add.image(x, BANK + 24 + Math.floor(R0() * 10) * 8, k + '@0').setScale(S).setDepth(53), k);
+      this.seas(this.add.image(x, BANK + 24 + Math.floor(R0() * 10) * 8, k + '@0').setScale(S).setDepth(48.8), k);
     }
     this.flies = [];
     for (let i = 0; i < 140; i++) {
@@ -4224,7 +4487,7 @@ class GameScene extends Phaser.Scene {
     this.reflCtx = this.reflTex.getContext();
     this.reflCtx.imageSmoothingEnabled = false;
     const grad = this.reflCtx.createLinearGradient(0, 0, 0, RH);
-    grad.addColorStop(0, 'rgba(20,44,62,0.32)'); grad.addColorStop(1, 'rgba(10,22,34,0.72)');
+    grad.addColorStop(0, 'rgba(24,60,72,0.22)'); grad.addColorStop(0.5, 'rgba(18,48,62,0.38)'); grad.addColorStop(1, 'rgba(10,26,40,0.6)');
     this.waterGrad = grad;
     this.water = this.add.image(0, BANK, 'reflect').setOrigin(0).setScrollFactor(0).setDepth(52);
   }
@@ -4273,7 +4536,7 @@ class GameScene extends Phaser.Scene {
   cull() {
     const sx = this.cameras.main.scrollX;
     const cr = this.cityRange;
-    for (const o of this.decor) { const x = o.x - sx * o.sf; o.setVisible(x > -260 && x < W + 260 && !(o.tree && cr && o.x > cr[0] - 10 && o.x < cr[1] + 10)); }
+    for (const o of this.decor) { const x = o.x - sx * o.sf; const m = o.cullR || 260; o.setVisible(x > -m && x < W + m && !(o.tree && cr && o.x > cr[0] - 10 && o.x < cr[1] + 10)); }
   }
   // Надписи не должны отражаться в воде: собираем их прямоугольники на экране
   labelRects() {
@@ -4317,10 +4580,10 @@ class GameScene extends Phaser.Scene {
   // ---------- таблички и оплата ----------
   makeUI(o, h) {
     o.paid = 0; o.slots = []; o.slotsCost = -1;
-    o.ui = this.add.container(o.x, 0).setDepth(20).setVisible(false);
+    o.ui = this.add.container(o.x, 0).setDepth(85).setVisible(false);
     o.label = this.add.text(0, 0, '', { ...TXT, fontSize: '22px', align: 'center' }).setOrigin(0.5, 1);
     o.ui.add(o.label);
-    o.bar = this.add.graphics().setDepth(19);
+    o.bar = this.add.graphics().setDepth(84);
     this.placeUI(o, h);
   }
   placeUI(o, h) { o.topY = GROUND - Math.max(h, 48); o.ui.y = o.topY - 40; }
@@ -4777,7 +5040,7 @@ class GameScene extends Phaser.Scene {
           this.lines.fillStyle(0xd0463a, 1).fillRect(tipX + flip * 16 - 2, BANK + 24 + bob, 4, 4);
           if (b.fishT <= 0) {
             b.fishT = Phaser.Math.FloatBetween(7, 11);
-            const f = this.add.image(tipX + flip * 16, BANK + 20, 'fish').setScale(S).setDepth(54);
+            const f = this.add.image(tipX + flip * 16, BANK + 20, 'fish').setScale(S).setDepth(48.9);
             this.tweens.add({ targets: f, y: GROUND - 70, x: b.spr.x, duration: 450, ease: 'Quad.out', onComplete: () => { f.destroy(); this.dropCoin(b.spr.x - flip * 22, true, GROUND - 70); music.sfx('coin'); } });
           }
         }
@@ -5255,16 +5518,10 @@ class GameScene extends Phaser.Scene {
     this.placeSky();
     const n = Math.pow((1 - Math.cos(this.dayT * Math.PI * 2)) / 2, 1.4);
     this.nightN = n;
-    this.night.setFillStyle(this.bloodNight ? 0x2a0a14 : 0x0c1428).setAlpha(n * 0.58);
     this.stars.setAlpha(n); this.moon.setAlpha(Math.min(1, n * 1.6));
     const dawn = this.dayT > 0.72 && this.dayT < 0.95 ? Math.sin((this.dayT - 0.72) / 0.23 * Math.PI) : 0;
     this.mist.setAlpha(dawn * 0.28 + (this.season === 2 ? 0.06 : 0));
-    const dc = this.skyCol(this.season), DAY = new Phaser.Display.Color(dc[0], dc[1], dc[2]);
-    const sky = Phaser.Display.Color.Interpolate.ColorWithColor(DAY, this.NIGHT, 100, Math.round(n * 100));
-    const skyCol = Phaser.Display.Color.GetColor(sky.r, sky.g, sky.b);
-    this.cameras.main.setBackgroundColor(skyCol);
-    this.haze1.setFillStyle(skyCol, 0.22); this.haze2.setFillStyle(skyCol, 0.14);
-    for (const cl of this.clouds) { cl.x += dt * 6; if (cl.x > W + 150) cl.x -= W + 300; cl.setAlpha((this.season === 3 ? 0.95 : 0.85) * (1 - n * 0.8)); }
+    this.updateLight(dt, time);
     for (const bd of this.birds) { bd.o.x += bd.sp * dt; if (bd.o.x > W + 30) { bd.o.x = -30; bd.o.y = 110 + Math.random() * 90; }
       bd.o.y += Math.sin(time / 500 + bd.ph) * 0.2; bd.o.setTexture(Math.sin(time / 120 + bd.ph) > 0 ? 'bird_A' : 'bird_B').setAlpha((1 - n) * (this.season === 3 ? 0.3 : 1)); }
     for (const bt of this.bats) { if (!bt.o.visible) continue; bt.o.setPosition(bt.x + Math.sin(time / 700 + bt.ph) * 120, GROUND - 150 + Math.sin(time / 330 + bt.ph * 2) * 40);
@@ -5278,7 +5535,7 @@ class GameScene extends Phaser.Scene {
       if (p.o.y > H) { p.o.y = -4; p.o.x = Math.random() * W; }
       if (this.season === 2) p.o.rotation += dt * 2;
     }
-    this.glow.setAlpha((0.2 + n * 0.8) * (0.9 + 0.1 * Math.sin(time / 80)));
+    this.glow.setAlpha((0.15 + n * 0.5) * (0.9 + 0.1 * Math.sin(time / 80)));
     for (const d of this.dens) if (d.alive) d.glow.setAlpha((0.25 + n * 0.75) * (0.85 + 0.15 * Math.sin(time / 130 + d.x)) * (d.enraged ? 1.6 : 1));
     if (!this.waveSent && !this.isNight && this.dayT < 0.5 && n > 0.3) this.sendWaves();
     if (!this.isNight && n > 0.5) this.startNight();
@@ -5683,7 +5940,7 @@ class GameScene extends Phaser.Scene {
     // рыба выпрыгивает из воды
     this.fishT -= dt;
     if (this.fishT <= 0) { this.fishT = 4 + Math.random() * 7;
-      const fx = Math.random() * W, fy = BANK + 30 + Math.random() * (RH - 50), f = this.add.image(fx, fy, 'fish').setScale(S).setScrollFactor(0).setDepth(53);
+      const fx = Math.random() * W, fy = BANK + 30 + Math.random() * (RH - 50), f = this.add.image(fx, fy, 'fish').setScale(S).setScrollFactor(0).setDepth(48.9);
       this.tweens.add({ targets: f, y: fy - 40, x: fx + 40, angle: -40, duration: 380, yoyo: true, ease: 'Sine.out', onComplete: () => { f.destroy(); const sp = this.add.ellipse(fx + 40, fy + 2, 22, 5, 0xdfe8ea, 0.6).setScrollFactor(0).setDepth(53); this.tweens.add({ targets: sp, scale: 2, alpha: 0, duration: 600, onComplete: () => sp.destroy() }); } }); }
   }
   // Катастрофа: случайное здание теряет уровень, здание первого уровня рушится
@@ -6104,7 +6361,7 @@ Object.assign(GameScene.prototype, {
     const spr = this.add.sprite(x, GROUND, 'tax_A_' + this.rk).setOrigin(0.5, 1).setScale(S).setDepth(7).setAlpha(0);
     this.tweens.add({ targets: spr, alpha: 1, duration: 300 });
     const bag = this.add.image(x, GROUND - 60, 'coin').setScale(3).setDepth(9).setVisible(false);
-    const cnt = this.add.text(x, GROUND - 60, '', { ...TXT, fontSize: '14px', color: '#f2c14e', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(9);
+    const cnt = this.add.text(x, GROUND - 60, '', { ...TXT, fontSize: '14px', color: '#f2c14e', strokeThickness: 3 }).setOrigin(0, 0.5).setDepth(86);
     this.collectors.push({ spr, bag, cnt, carry: 0, coin: null, wait: 0, ft: 0, f: 0, target: x, idx: this.collectors.length });
     this.puff(x, 0xcbb894, 6, 16); music.sfx('coin');
     this.updateHud(true);
@@ -6294,7 +6551,7 @@ Object.assign(GameScene.prototype, {
 
   // ---------- горы и холмы: несколько планов, свет и тень по склонам, снег, деревья на гребнях ----------
   drawHills(s) {
-    const B = this.biome, HS = BIOME_HILLS[B][s], MK = H / UH, HK = 1 + (MK - 1) * 0.6;
+    const B = this.biome, HS0 = BIOME_HILLS[B][s], HS = Object.fromEntries(Object.entries(HS0).map(([k, v]) => [k, k === 'snow' ? v : gradeInt(v)])), MK = H / UH, HK = 1 + (MK - 1) * 0.6;
     const sky = this.skyCol(s), skyI = (sky[0] << 16) | (sky[1] << 8) | sky[2];
     const snow = HS.snow < -1000 ? -9999 : GROUND - MK * (GROUND - HS.snow);
     const hash = (x, y) => { let h = (x * 374761393 + y * 668265263) ^ (this.seed || 0); h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
@@ -6426,6 +6683,195 @@ Object.assign(GameScene.prototype, {
     for (const u of [...this.units]) if (Math.abs(u.spr.x - x) < 34) this.damageUnit(u, 6);
     for (const e of this.enemies) if (!e.dead && Math.abs(e.spr.x - x) < 60) this.damageEnemy(e, 10);
     if (Math.abs(this.player.x - x) < 30) this.playerHitBy(x - 10, 2);
+  },
+});
+
+// ================== СВЕТ, НЕБО, ОБЛАКА, ВОДА, ПИКСЕЛЬНАЯ СЕТКА ==================
+// Настроение суток: общий цветовой тон сцены, дымка на дальних планах, силуэты на закате,
+// градиентное небо, живописные облака, большая вода с отражением неба и единая сетка 3×3.
+const PIX = 3;   // размер пикселя на экране: всё, что ниже интерфейса, приводится к этой сетке
+
+// ключевые точки по высоте солнца e = cos(угла): 1 — полдень, 0 — горизонт, −1 — полночь
+const LIGHT_KEYS = [
+  //  e      тон сцены (умножение)   верх неба          горизонт            подъём фона (экран)
+  [ 1.00, [255, 255, 255], null,              null,               [0, 0, 0]],
+  [ 0.45, [255, 248, 236], null,              null,               [6, 4, 0]],
+  [ 0.18, [255, 222, 182], [118, 150, 190],   [255, 206, 150],    [26, 14, 4]],
+  [ 0.02, [246, 172, 142], [96, 104, 168],    [252, 150, 112],    [58, 30, 26]],
+  [-0.14, [204, 152, 172], [66, 62, 124],     [214, 120, 140],    [56, 30, 46]],
+  [-0.34, [118, 116, 172], [30, 36, 74],      [84, 66, 112],      [30, 26, 48]],
+  [-1.00, [ 86, 100, 156], [18, 26, 48],      [34, 42, 74],       [18, 22, 40]],
+];
+const lerp3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const rgbI = c => (Math.round(c[0]) << 16) | (Math.round(c[1]) << 8) | Math.round(c[2]);
+const rgbS = c => `rgb(${Math.round(c[0])},${Math.round(c[1])},${Math.round(c[2])})`;
+
+// ---------- живописные облака: пухлые клубы с освещённым верхом и тенью снизу ----------
+const CLOUD_PAL = {
+  day:   { hi: '#f6f3ec', mid: '#dfe0dc', lo: '#b9c2ca', deep: '#9ba8b4' },
+  dusk:  { hi: '#ffe0b0', mid: '#f0b0a0', lo: '#b48098', deep: '#866688' },
+  night: { hi: '#6e7aa0', mid: '#4c587c', lo: '#36405e', deep: '#2a3250' },
+};
+const CLOUD_SHAPES = 6;
+function paintBigCloud(P, w, h, seed, pal) {
+  const R0 = rng(seed), lumps = [], n = 5 + Math.floor(R0() * 4), base = h - 3;
+  for (let i = 0; i < n; i++) {
+    const t = (i + 0.5) / n, cx = 6 + t * (w - 12) + (R0() - 0.5) * 6;
+    const r = (h * 0.32) * (0.55 + Math.sin(t * Math.PI) * 0.6 + R0() * 0.25);
+    lumps.push([cx, base - r * (0.55 + R0() * 0.35), r, r * (0.8 + R0() * 0.2)]);
+  }
+  // задние клубы — сверху, передние нижние рисуются поверх
+  lumps.sort((a, b) => a[1] - b[1]);
+  for (const [cx, cy, rx, ry] of lumps) P.ell(cx, cy, rx, ry, (x, y, nx, ny) => {
+    if (y > base) return null;
+    const lit = -nx * 0.45 - ny;
+    return lit > 0.62 ? pal.hi : lit > 0.05 ? pal.mid : ny > 0.55 ? pal.deep : pal.lo;
+  });
+  // ровное основание облака
+  for (let x = 0; x < w; x++) for (let y = base - 1; y <= base; y++) {
+    const c = P.ctx.getImageData(x, y - 2, 1, 1).data; if (c[3]) P.px(x, y, pal.deep);
+  }
+}
+function buildLightTextures(scene) {
+  for (let i = 0; i < CLOUD_SHAPES; i++) {
+    const w = 70 + (i * 23) % 60, h = 24 + (i * 7) % 16;
+    for (const k in CLOUD_PAL) paintTex(scene, `bcloud_${i}_${k}`, w, h, P => paintBigCloud(P, w, h, 1000 + i * 77, CLOUD_PAL[k]));
+  }
+  paintTex(scene, 'sun_low', 26, 26, P => { P.ell(13, 13, 12.5, 12.5, '#ffb070'); P.ell(13, 13, 10.5, 10.5, '#ffc890'); P.ell(11, 11, 5, 5, '#ffe2b8'); });
+  glowTex(scene, 'glow_halo', '255,190,150', 0.5);
+  glowTex(scene, 'glow_moon', '190,210,255', 0.35);
+  // средний ярус деревьев: те же деревья, уменьшенные на 2/3, но на общей пиксельной сетке
+  for (const s of [0, 1, 2, 3]) for (const k of ['pine_near', 'tree_near_0', 'tree_near_1', 'tree_near_2', 'spruce', 'crag', 'cactus_0', 'cactus_1'])
+    if (scene.textures.exists(`${k}@${s}`)) scaledCopy(scene, `${k}@${s}`, `${k}_m@${s}`, 2 / 3);
+}
+
+Object.assign(GameScene.prototype, {
+  // ---------- создание неба, дымки и облаков (вызывается из drawBackdrop) ----------
+  buildSkyLayers() {
+    const R0 = rng(this.seed + 313);
+    this.skyImg = this.add.graphics().setScrollFactor(0).setDepth(-33);
+    this.skyKey = '';
+    this.halo = this.add.image(0, 0, 'glow_halo').setScale(7).setScrollFactor(0).setDepth(-31.5).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
+    this.moonGlow = this.add.image(0, 0, 'glow_moon').setScale(4).setScrollFactor(0).setDepth(-31.5).setBlendMode(Phaser.BlendModes.ADD).setAlpha(0);
+    this.sunLow = this.add.image(0, 0, 'sun_low').setScale(3).setScrollFactor(0).setDepth(-29.9).setAlpha(0);
+    // облака: дальний крупный слой и ближний, у каждого три освещения
+    for (const c of this.clouds) c.destroy();
+    this.clouds = [];
+    const mk = (n, y0, y1, sp, depth, scale) => { for (let i = 0; i < n; i++) {
+      const shape = Math.floor(R0() * CLOUD_SHAPES), x = (i + R0() * 0.6) * (W + 400) / n - 200, y = y0 + R0() * (y1 - y0);
+      const imgs = {}; for (const k in CLOUD_PAL) imgs[k] = this.add.image(x, y, `bcloud_${shape}_${k}`).setScale(scale).setScrollFactor(0).setDepth(depth).setAlpha(0);
+      this.clouds.push({ imgs, x, y, sp, w: this.textures.get(`bcloud_${shape}_day`).getSourceImage().width * scale });
+    } };
+    mk(4, 40, 130, 3, -28.5, 3); mk(5, 120, 250, 7, -28, 3);
+    // дымка между планами: дальние планы растворяются в цвете неба (полупрозрачный градиент сверху вниз)
+    this.hazes = [[-26.5, GROUND - 430, 0.46, GROUND - 48], [-24.6, GROUND - 330, 0.32, GROUND - 48], [-18, GROUND - 260, 0.24, GROUND + 3], [-11, GROUND - 200, 0.13, GROUND + 3]].map(([d, y0, a, y1], i) => {
+      return { y0, a, y1, img: this.add.graphics().setScrollFactor(0).setDepth(d) };
+    });
+    this.haze1.destroy(); this.haze2.destroy(); this.haze1 = this.haze2 = { setFillStyle() { return this; } };
+    // подъём фона (режим «экран»): фон светлее переднего плана — на закате передний план уходит в силуэт
+    this.lift = this.add.rectangle(0, 0, W, GROUND - 30, 0x000000).setOrigin(0).setScrollFactor(0).setDepth(-20).setBlendMode(Phaser.BlendModes.SCREEN);
+    // общий тон сцены (режим «умножение») вместо прежней тёмной ночной заливки
+    this.night.setBlendMode(Phaser.BlendModes.MULTIPLY).setAlpha(1).setFillStyle(0xffffff);
+    // крупные ориентиры биома на дальнем плане
+    { const R1 = rng(this.seed + 515), sf = 0.13, kinds = LANDMARKS[this.biome], sx0 = (this.center - W / 2) * sf;
+      for (let i = -3; i <= 3; i++) { if (i === 0 && R1() < 0) continue;
+        const [key, lw] = kinds[(i + 4 + Math.floor(R1() * 2)) % 2], x = sx0 + W * 0.72 + i * (1000 + R1() * 400);
+        const img = this.add.image(x, GROUND - 92 + R1() * 14, key + '@0').setOrigin(0.5, 1).setScale(3).setScrollFactor(sf).setDepth(-24.8).setFlipX(R1() < 0.4);
+        img.cullR = lw * 1.6 + 60; this.seas(img, key, sf);
+      } }
+    // вода и всё, что над ней, — под общим тоном
+    this.water.setDepth(48.6);
+  },
+
+  // ---------- свет по времени суток (каждый кадр) ----------
+  updateLight(dt, time) {
+    const e = Math.cos(this.dayT * Math.PI * 2), K = LIGHT_KEYS;
+    let i = 0; while (i < K.length - 2 && e < K[i + 1][0]) i++;
+    const t = Phaser.Math.Clamp((K[i][0] - e) / (K[i][0] - K[i + 1][0]), 0, 1);
+    const dc = this.skyCol(this.season), dayTop = dc, dayHor = lerp3(dc, [255, 255, 255], 0.4);
+    const top = lerp3(K[i][2] || dayTop, K[i + 1][2] || dayTop, t), hor = lerp3(K[i][3] || dayHor, K[i + 1][3] || dayHor, t);
+    let grade = lerp3(K[i][1], K[i + 1][1], t), lift = lerp3(K[i][4], K[i + 1][4], t);
+    if (this.bloodNight) grade = lerp3(grade, [200, 90, 100], this.nightN * 0.6);
+    if (this.storm || this.thunder) { grade = lerp3(grade, [150, 160, 176], 0.35); }
+    this.night.setFillStyle(rgbI(grade)).setVisible(grade[0] + grade[1] + grade[2] < 762);
+    this.lift.setFillStyle(rgbI(lift)).setVisible(lift[0] + lift[1] + lift[2] > 3);
+    this.cameras.main.setBackgroundColor(rgbI(top));
+    // градиент неба полосами, как в пиксель-арте; перерисовывается, только когда цвет заметно сменился
+    const key = rgbI(top) + ':' + rgbI(hor);
+    if (key !== this.skyKey && (time - (this.skyT || 0) > 120 || !this.skyKey)) {
+      this.skyKey = key; this.skyT = time;
+      const g = this.skyImg.clear(), bands = 18, bh = Math.ceil(BANK / bands / PIX) * PIX;
+      for (let b = 0; b < bands; b++) { const k = Math.pow(b / (bands - 1), 1.6); g.fillStyle(rgbI(lerp3(top, hor, k)), 1).fillRect(0, b * bh, W, bh); }
+      const hc = rgbI(hor), step = PIX * 3, hk = e > 0.3 ? 0.72 : 1;
+      for (const hz of this.hazes) {
+        const c = hz.img.clear();
+        for (let y = Math.max(0, hz.y0); y < hz.y1; y += step) { const k = Math.min(1, (y - hz.y0) / (GROUND - hz.y0)); c.fillStyle(hc, hz.a * hk * k * k).fillRect(0, y, W, step); }
+      }
+    }
+    // солнце у горизонта крупнее и теплее, вокруг — ореол
+    const dusk = Math.max(0, 1 - Math.abs(e) / 0.32), sunUp = this.sun.visible;
+    this.sunLow.setPosition(this.sun.x, this.sun.y).setVisible(sunUp).setAlpha(sunUp ? Math.min(1, dusk * 1.4) * this.sun.alpha : 0);
+    { const ha = sunUp ? dusk * 0.9 : (e > -0.3 && e < 0 ? (0.3 + e) * 2 : 0); this.halo.setPosition(this.sun.x, this.sun.y + 20).setAlpha(ha).setVisible(ha > 0.01); }
+    this.sunGlow.setScale(3 + dusk * 2);
+    this.moonGlow.setPosition(this.moon.x, this.moon.y).setAlpha(this.moon.alpha * 0.8).setVisible(this.moon.alpha > 0.01);
+    // облака: смесь дневного, закатного и ночного освещения
+    const wN = Phaser.Math.Clamp((-e - 0.12) / 0.3, 0, 1), wD = (1 - wN) * Math.max(0, 1 - Math.abs(e - 0.02) / 0.4), wDay = Math.max(0, 1 - wN - wD);
+    const ca = (this.storm || this.thunder ? 1 : (this.season === 3 ? 0.95 : 0.9));
+    for (const c of this.clouds) {
+      c.x += c.sp * dt * (this.storm ? 3 : 1); if (c.x > W + c.w / 2 + 60) c.x = -c.w / 2 - 60 - Math.random() * 200;
+      c.imgs.day.setPosition(c.x, c.y).setAlpha(wDay * ca); c.imgs.dusk.setPosition(c.x, c.y).setAlpha(wD * ca); c.imgs.night.setPosition(c.x, c.y).setAlpha(wN * ca);
+    }
+  },
+
+  // ---------- отражение: зеркало неба и берега, рябь полосами, блики ----------
+  updateReflection(time) {
+    // источник — уже сведённый к сетке кадр без надписей (если сетка включена), иначе сам холст
+    const small = this.pixFresh ? this.pixSmall : null, sw = small ? small.width : 0;
+    const src = this.sys.game.canvas, ctx = this.reflCtx, rects = small ? [] : this.labelRects();
+    ctx.globalCompositeOperation = 'source-over';
+    ctx.fillStyle = '#1b3040'; ctx.fillRect(0, 0, W, RH);
+    const t1 = time * 0.0021, t2 = time * 0.0011;
+    for (let r = 0; r < RH; r += PIX) {
+      const sy = Math.round(GROUND - 1 - r * 1.12); if (sy < PIX) break;
+      const amp = 1.2 + r * 0.05, band = Math.sin(r * 0.09 + t2 * 3) > 0.82 ? 2.2 : 1;
+      const off = Math.round((Math.sin(t1 + r * 0.21) * amp + Math.sin(t2 + r * 0.07) * amp * 0.7) * band / PIX) * PIX;
+      if (small) { const y3 = Math.floor(sy / PIX); ctx.drawImage(small, 0, y3, sw, 1, off, r, sw * PIX, PIX); if (off > 0) ctx.drawImage(small, 0, y3, 1, 1, 0, r, off, PIX); else if (off < 0) ctx.drawImage(small, sw - 1, y3, 1, 1, sw * PIX + off, r, -off + PIX, PIX); }
+      else {
+        ctx.drawImage(src, 0, sy - PIX + 1, W, PIX, off, r, W, PIX);
+        for (const [x0, y0, x1, y1] of rects) if (sy >= y0 && sy < y1 && y1 + 2 < GROUND) ctx.drawImage(src, x0, y1 + 2, x1 - x0, PIX, x0 + off, r, x1 - x0, PIX);
+      }
+    }
+    ctx.fillStyle = this.waterGrad; ctx.fillRect(0, 0, W, RH);
+    if (this.season === 3) { ctx.fillStyle = 'rgba(200,220,230,0.12)'; ctx.fillRect(0, 0, W, RH); }
+    // блики-штрихи: медленно плывут и мерцают
+    for (let i = 0; i < 46; i++) {
+      const fl = Math.sin(time * 0.003 + i * 1.7); if (fl < -0.2) continue;
+      const y = Math.floor((PIX * 2 + ((i * 53) % (RH - PIX * 4))) / PIX) * PIX;
+      const x = Math.floor((((i * 197 + time * 0.01 * (1 + i % 3)) % (W + 120)) - 60) / PIX) * PIX;
+      ctx.fillStyle = `rgba(225,240,245,${(0.18 + 0.22 * fl).toFixed(2)})`;
+      ctx.fillRect(x, y, PIX * (2 + (i % 5) * 2), PIX);
+    }
+    ctx.fillStyle = 'rgba(225,240,240,0.3)'; ctx.fillRect(0, 0, W, PIX);
+    this.reflTex.refresh();
+  },
+
+  // ---------- единая пиксельная сетка ----------
+  // Всё, что нарисовано до этого слоя (мир, вода, погода), сводится к пикселям 3×3; интерфейс и надписи — поверх, чёткие.
+  addPixelGrid() {
+    const w3 = Math.ceil(W / PIX), h3 = Math.ceil(H / PIX);
+    const small = document.createElement('canvas'); small.width = w3; small.height = h3;
+    const sctx = small.getContext('2d'); sctx.imageSmoothingEnabled = false;
+    const g = this.add.extern().setDepth(80);
+    g.renderCanvas = (renderer) => {
+      if (this.noPixelGrid || SETTINGS.pixel === false) { this.pixFresh = false; return; }
+      const ctx = renderer.currentContext, cv = ctx.canvas;
+      ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0); ctx.globalAlpha = 1; ctx.globalCompositeOperation = 'source-over'; ctx.imageSmoothingEnabled = false;
+      sctx.drawImage(cv, 0, 0, w3 * PIX, h3 * PIX, 0, 0, w3, h3);
+      ctx.drawImage(small, 0, 0, w3, h3, 0, 0, w3 * PIX, h3 * PIX);
+      this.pixFresh = true;
+      ctx.restore();
+    };
+    this.pixelGrid = g; this.pixSmall = small;
   },
 });
 
