@@ -341,11 +341,26 @@ function mix(a, b, t) {
   return '#' + ((1 << 24) | (ch(16) << 16) | (ch(8) << 8) | ch(0)).toString(16).slice(1);
 }
 // Ноги идущего персонажа: f — кадр (0 стоит, 1 шагает)
+// Кадры шага: 0 — стоит, 1 — шаг; цикл ходьбы 10..13 — шаг, перенос, шаг другой ногой, перенос.
+const gaitO = f => (f === 1 || f === 10) ? 1 : f === 12 ? -1 : 0;
+const gaitLift = f => f === 11 ? -1 : f === 13 ? 1 : 0;   // −1 поднята дальняя нога, 1 — ближняя
+// поза ног: A — стойка, B — шаг; шаг другой ногой — зеркало B относительно A
+function gaitPick(f, A, B) {
+  const o = gaitO(f); if (!o) return A; if (o > 0) return B;
+  const m = (a, b) => Array.isArray(a) ? a.map((v, i) => m(v, b[i])) : (typeof a === 'number' ? 2 * a - b : a);
+  return m(A, B);
+}
+const WALK_F = [10, 11, 12, 13];
+const BLD_F = fr => ({ walk1: 1, wk1: 10, wk2: 11, wk3: 12, wk4: 13 })[fr] || 0;
+const BLD_WALK = fr => /^(walk|wk)/.test(fr);
 function legs(P, xl, xr, top, len, f, near, far, boot, wd = 2) {
-  const o = f === 1 ? 1 : 0;
-  P.rect(xl - o, top, wd, len, far); P.rect(xl - o, top + len, wd + 1, 1, boot);
-  P.rect(xr + o, top, wd, len, near); P.rect(xr + o, top + len, wd + 1, 1, boot);
-  if (f === 1) { P.px(xl - o - 1, top + len, boot); }
+  // в профиль шаг другой ногой — тот же широкий шаг, но ближняя и дальняя ноги меняются местами
+  const walk = f === 10 || f === 12, o = walk ? 2 : (f === 1 ? 1 : 0), lift = gaitLift(f), lf = lift < 0 ? 1 : 0, ln = lift > 0 ? 1 : 0;
+  if (f === 12) { const t = near; near = far; far = t; }
+  P.rect(xl - o, top, wd, len - lf, far); P.rect(xl - o, top + len - lf, wd + 1, 1, boot);
+  P.rect(xr + o, top, wd, len - ln, near); P.rect(xr + o, top + len - ln, wd + 1, 1, boot);
+  if (o) { P.px(xl - o - 1, top + len, boot); }
+  if (lift) { const x = lift < 0 ? xl : xr; P.px(x + (lift < 0 ? 1 : -1), top + len - 2, lift < 0 ? far : near); }
 }
 
 // ================== ПИКСЕЛЬ-АРТ: ПЕРСОНАЖИ ==================
@@ -557,10 +572,10 @@ function drawBeast(P, p, st, f) {
     // хвост
     P.line(5, 13, 2, 10, t); P.line(2, 10, 1, 7, t); P.rect(0, 5, 2, 3, w1);
     // дальнее крыло
-    const up = f === 0 ? 0 : 3;
+    const up = gaitO(f) ? 3 : 0;
     P.poly([[9, 12], [6, 2 + up], [9, 0 + up], [15, 5 + up], [14, 12]], w1);
     // лапы
-    const lp = f === 0 ? [[6, t], [9, T], [17, claw], [20, claw]] : [[5, t], [10, T], [16, claw], [21, claw]];
+    const lp = gaitPick(f, [[6, t], [9, T], [17, claw], [20, claw]], [[5, t], [10, T], [16, claw], [21, claw]]);
     for (const [x, c] of lp) { P.rect(x, 17, 2, 6, c === claw ? F : c); P.rect(x, 23, 3, 1, c === claw ? claw : '#3b2a20'); }
     // тело льва и грудь орла
     P.ell(12, 15, 8.5, 4.5, sh3(TT, T, t));
@@ -578,7 +593,7 @@ function drawBeast(P, p, st, f) {
   } else if (st === 'tent') {
     // огр с дубиной
     const O = '#8a9a5a', o = '#6a7a42', Oh = '#a2b06e';
-    const lx = f === 0 ? [8, 15] : [7, 16];
+    const lx = gaitPick(f, [8, 15], [7, 16]);
     P.rect(lx[0], 18, 4, 5, o); P.rect(lx[1], 18, 4, 5, O);
     P.rect(lx[0] - 1, 23, 5, 1, p.B); P.rect(lx[1], 23, 5, 1, p.B);
     P.rect(3, 9, 4, 9, o); P.rect(3, 17, 4, 2, o);
@@ -597,7 +612,7 @@ function drawBeast(P, p, st, f) {
   } else {
     // тролль с каменной дубиной
     const G = '#6f8a7a', g = '#52685b', Gh = '#88a392', moss = '#4f6b3a';
-    const lx = f === 0 ? [7, 13] : [6, 14];
+    const lx = gaitPick(f, [7, 13], [6, 14]);
     P.rect(lx[0], 17, 3, 6, g); P.rect(lx[1], 17, 3, 6, G); P.rect(lx[0] - 1, 23, 4, 1, g); P.rect(lx[1], 23, 4, 1, g);
     P.rect(2, 8, 3, 10, g); P.rect(1, 17, 4, 2, g);
     P.ell(10, 11, 8, 6.5, sh3(Gh, G, g, -0.55, 0.55));
@@ -617,13 +632,13 @@ function drawBeast(P, p, st, f) {
 // ---------- рабочий (16×20) ----------
 function drawBuilder(P, p, st, fr) {
   const hat = '#c9a85a', hat2 = '#a08440', shirt = '#c9b48a', shirtD = '#a8936a', trou = '#5e5040', apron = '#7a5a3a';
-  legs(P, 6, 9, 15, 4, fr === 'walk1' ? 1 : 0, trou, mix(trou, '#000000', 0.25), p.B);
+  legs(P, 6, 9, 15, 4, BLD_F(fr), trou, mix(trou, '#000000', 0.25), p.B);
   P.rect(5, 9, 6, 6, shirt); P.rect(5, 9, 1, 6, shirtD); P.rect(7, 11, 4, 4, apron); P.rect(5, 11, 6, 1, p.B); P.px(8, 13, '#5a4028');
   P.rect(6, 4, 4, 5, p.S); P.rect(6, 8, 4, 1, p.s); P.px(9, 6, p.E); P.px(10, 6, p.s); P.rect(5, 5, 1, 3, p.H);
   if (st === 'tent') { P.px(9, 8, p.W); P.rect(6, 7, 5, 1, p.S); }
   if (st === 'mound') { P.rect(3, 5, 3, 1, p.S); P.px(2, 4, p.S); P.px(10, 6, p.S); P.px(11, 6, p.s); }
   P.rect(4, 3, 8, 1, hat); P.rect(5, 1, 6, 2, hat); P.rect(5, 2, 6, 1, hat2); P.px(11, 3, hat2); P.px(6, 1, '#ddc078');
-  if (fr === 'walk0' || fr === 'walk1') {
+  if (BLD_WALK(fr)) {
     P.rect(10, 10, 1, 3, shirt); P.px(10, 13, p.S);
     P.rect(4, 12, 1, 4, p.D); P.rect(3, 12, 3, 1, STONE);
   } else if (fr === 'work0') {
@@ -676,7 +691,7 @@ function drawBrute(P, f, Q = FOE_PAL, tame) {
 }
 function drawFiend(P, f, Q = FOE_PAL, tame) {
   const X = Q.fX, x = Q.fx, x2 = Q.fx2, wing = Q.wing, wl = Q.wl, m = '#9a8f7c', E = Q.fE;
-  const up = f === 0 ? 0 : 3;
+  const up = gaitO(f) ? 3 : 0;
   P.poly([[8, 9], [0, 1 + up], [3, 9 + up], [1, 13 + up], [8, 14]], wing); P.line(8, 9, 1, 2 + up, wl); P.line(3, 9 + up, 7, 12, wl);
   P.poly([[14, 9], [22, 1 + up], [19, 9 + up], [21, 13 + up], [14, 14]], wing); P.line(14, 9, 21, 2 + up, wl); P.line(19, 9 + up, 15, 12, wl);
   P.rect(6, 8, 10, 11, X); P.rect(5, 11, 12, 6, X); P.rect(8, 10, 1, 8, x); P.rect(13, 10, 1, 8, x); P.px(11, 12, x2);
@@ -758,23 +773,28 @@ function buildCharTextures(scene) {
     const p = RACES[k].pal, st = RACES[k].style;
     paintTex(scene, 'mon_A_' + k, 30, 28, P => drawMonarch(P, p, st, 0));
     paintTex(scene, 'mon_B_' + k, 30, 28, P => drawMonarch(P, p, st, 1));
+    WALK_F.forEach((wf, i) => paintTex(scene, `mon_W${i + 1}_${k}`, 30, 28, P => drawMonarch(P, p, st, wf)));
     for (const [key, w, h, fn, frames] of [['mel', 16, 20, drawMelee, 2], ['rng', 16, 20, drawRanged, 2], ['bst', 27, 24, drawBeast, 2], ['mag', 16, 22, drawMage, 3]]) {
       ['A', 'B', 'C'].slice(0, frames).forEach((fr, i) => paintTex(scene, `${key}_${fr}_${k}`, w, h, P => fn(P, p, st, i)));
+      WALK_F.forEach((wf, i) => paintTex(scene, `${key}_W${i + 1}_${k}`, w, h, P => fn(P, p, st, wf)));
       silhouette(scene, `${key}_A_${k}`, `${key}_X_${k}`, '#e03a3a');
     }
     paintTex(scene, 'cat_A_' + k, 30, 22, P => drawCatapult(P, p, 0));
     paintTex(scene, 'cat_B_' + k, 30, 22, P => drawCatapult(P, p, 1));
     silhouette(scene, 'cat_A_' + k, 'cat_X_' + k, '#e03a3a');
-    for (const fr of ['walk0', 'walk1', 'work0', 'work1', 'fish'])
+    for (const fr of ['walk0', 'walk1', 'work0', 'work1', 'fish', 'wk1', 'wk2', 'wk3', 'wk4'])
       paintTex(scene, `bld_${fr}_${k}`, 16, 20, P => drawBuilder(P, p, st, fr));
     paintTex(scene, 'orb_' + k, 6, 6, P => { P.ell(3, 3, 3, 3, p.G); P.ell(3, 3, 1.6, 1.6, '#ffffff'); });
     const Q = tamePal(p);
     for (const [key, w, h, fn] of [['aimp', 12, 16, drawImp], ['abrute', 19, 21, drawBrute], ['afiend', 22, 26, drawFiend]]) {
       ['A', 'B'].forEach((fr, i) => paintTex(scene, `${key}_${fr}_${k}`, w, h, P => fn(P, i, Q, p)));
+      WALK_F.forEach((wf, i) => paintTex(scene, `${key}_W${i + 1}_${k}`, w, h, P => fn(P, wf, Q, p)));
       silhouette(scene, `${key}_A_${k}`, `${key}_X_${k}`, '#e03a3a');
     }
-    for (let v = 0; v < 4; v++) { paintTex(scene, `vil_A_${v}_${k}`, 10, 17, P => drawVillager(P, 0, v, p, st)); paintTex(scene, `vil_B_${v}_${k}`, 10, 17, P => drawVillager(P, 1, v, p, st)); }
+    for (let v = 0; v < 4; v++) { paintTex(scene, `vil_A_${v}_${k}`, 10, 17, P => drawVillager(P, 0, v, p, st)); paintTex(scene, `vil_B_${v}_${k}`, 10, 17, P => drawVillager(P, 1, v, p, st));
+      WALK_F.forEach((wf, i) => paintTex(scene, `vil_W${i + 1}_${v}_${k}`, 10, 17, P => drawVillager(P, wf, v, p, st))); }
     paintTex(scene, 'tax_A_' + k, 12, 17, P => drawTax(P, 0, p, st)); paintTex(scene, 'tax_B_' + k, 12, 17, P => drawTax(P, 1, p, st));
+    WALK_F.forEach((wf, i) => paintTex(scene, `tax_W${i + 1}_${k}`, 12, 17, P => drawTax(P, wf, p, st)));
     paintTex(scene, 'cart_A_' + k, 29, 16, P => drawCart(P, p, 0));
     paintTex(scene, 'cart_B_' + k, 29, 16, P => drawCart(P, p, 1));
   }
@@ -798,7 +818,7 @@ const WILD_GNOME = { cap: '#b0302a', capd: '#7a1e1a', beard: '#ddd4c2', skin: '#
 
 // ---------- дикий гоблин (12×16) ----------
 function drawWGob(P, f, Q = WILD_GOB) {
-  const o = f ? 1 : 0;
+  const o = gaitO(f);
   P.rect(3 - o, 12, 2, 3, Q.gd); P.rect(7 + o, 12, 2, 3, Q.g); P.rect(2 - o, 15, 3, 1, Q.ragd); P.rect(7 + o, 15, 3, 1, Q.ragd);
   P.poly([[2, 7], [9, 6], [10, 12], [2, 12]], Q.rag); P.rect(2, 11, 8, 1, Q.ragd); P.px(4, 9, Q.ragd); P.px(7, 10, Q.ragd);
   P.rect(1, 8, 2, 3, Q.gd);
@@ -809,7 +829,7 @@ function drawWGob(P, f, Q = WILD_GOB) {
 }
 // ---------- хобгоблин с шипастой дубиной (19×21) ----------
 function drawHob(P, f, Q = WILD_GOB) {
-  const o = f ? 1 : 0, metal = '#7a7a74';
+  const o = gaitO(f), metal = '#7a7a74';
   P.rect(5 - o, 15, 3, 5, Q.gd); P.rect(11 + o, 15, 3, 5, Q.g); P.rect(4 - o, 20, 4, 1, Q.ragd); P.rect(11 + o, 20, 4, 1, Q.ragd);
   P.rect(2, 8, 3, 7, Q.gd); P.rect(2, 14, 3, 2, Q.gd);
   P.ell(9.5, 11, 6.5, 5.5, sh3(Q.gh, Q.g, Q.gd));
@@ -824,7 +844,7 @@ function drawHob(P, f, Q = WILD_GOB) {
 // ---------- вождь дикарей верхом на варге (27×23) ----------
 function drawWarg(P, f, Q = WILD_GOB) {
   const W1 = '#5a5048', w1 = '#3e362f', wh = '#7a6e62';
-  const L = f ? [[5, 16, 3, 21], [9, 16, 11, 21], [17, 16, 15, 21], [21, 16, 23, 21]] : [[5, 16, 5, 21], [9, 16, 9, 21], [17, 16, 17, 21], [21, 16, 21, 21]];
+  const L = gaitPick(f, [[5, 16, 5, 21], [9, 16, 9, 21], [17, 16, 17, 21], [21, 16, 21, 21]], [[5, 16, 3, 21], [9, 16, 11, 21], [17, 16, 15, 21], [21, 16, 23, 21]]);
   for (const [a, b, c, d] of L) { P.line(a, b, c, d, w1, 2); P.rect(c, d + 1, 3, 1, INK); }
   P.line(5, 13, 1, 9, w1, 2); P.px(0, 8, wh);
   P.ell(13, 14, 9.5, 4.3, sh3(wh, W1, w1));
@@ -840,7 +860,7 @@ function drawWarg(P, f, Q = WILD_GOB) {
 }
 // ---------- гном с киркой (12×16) ----------
 function drawGnome(P, f, Q = WILD_GNOME) {
-  const o = f ? 1 : 0, boot = '#3b2a20';
+  const o = gaitO(f), boot = '#3b2a20';
   P.rect(3 - o, 13, 2, 2, Q.coatd); P.rect(7 + o, 13, 2, 2, Q.coat); P.rect(2 - o, 15, 3, 1, boot); P.rect(7 + o, 15, 3, 1, boot);
   P.rect(2, 8, 8, 5, Q.coat); P.rect(2, 8, 1, 5, Q.coatd); P.rect(2, 12, 8, 1, Q.coatd);
   P.rect(1, 9, 2, 3, Q.coatd); P.px(1, 12, Q.skin);
@@ -851,7 +871,7 @@ function drawGnome(P, f, Q = WILD_GNOME) {
 }
 // ---------- гном-воин в броне с молотом (19×21) ----------
 function drawDwarf(P, f, Q = WILD_GNOME) {
-  const o = f ? 1 : 0, A = '#8a8d92', a = '#5e6166', Ah = '#b0b3b8', beard = '#c0703a', bd = '#8a4a22', boot = '#3b2a20';
+  const o = gaitO(f), A = '#8a8d92', a = '#5e6166', Ah = '#b0b3b8', beard = '#c0703a', bd = '#8a4a22', boot = '#3b2a20';
   P.rect(5 - o, 16, 3, 4, a); P.rect(11 + o, 16, 3, 4, A); P.rect(4 - o, 20, 4, 1, boot); P.rect(11 + o, 20, 4, 1, boot);
   P.rect(2, 9, 3, 6, a); P.rect(2, 14, 3, 2, Q.skin);
   P.ell(9.5, 12, 6.5, 5, sh3(Ah, A, a)); P.rect(4, 15, 11, 2, Q.coat); P.rect(8, 15, 3, 1, '#d8b85a');
@@ -865,7 +885,7 @@ function drawDwarf(P, f, Q = WILD_GNOME) {
 // ---------- каменный голем с рунами (22×26) ----------
 function drawGolem(P, f, Q = WILD_GNOME) {
   const s1 = '#7d776c', s2 = '#5c574e', s3 = '#a19a8c', rune = '#ff9a3a';
-  const lx = f ? [4, 13] : [5, 12];
+  const lx = gaitPick(f, [5, 12], [4, 13]);
   P.rect(lx[0], 19, 5, 6, s2); P.rect(lx[1], 19, 5, 6, s1); P.rect(lx[0] - 1, 25, 6, 1, s2); P.rect(lx[1], 25, 6, 1, s2);
   P.rect(0, 9, 5, 9, s2); P.rect(0, 17, 5, 3, s1);
   P.rect(17, 9, 5, 9, s1); P.rect(17, 17, 5, 3, s3);
@@ -918,7 +938,7 @@ function drawUniq(P, p, st, f) {
   if (st === 'house') {
     // единорог
     const N = '#ece8e0', n = '#c8c2b8', m = '#ffffff', mane = '#9ac8ff', horn = '#f2c14e', hoof = '#8a8478';
-    const L = f === 0 ? [[6, 15, 6, 21, n], [18, 15, 18, 21, n], [9, 15, 9, 21, N], [21, 15, 21, 21, N]] : [[7, 15, 9, 21, n], [18, 15, 15, 21, n], [9, 15, 5, 20, N], [21, 15, 24, 20, N]];
+    const L = gaitPick(f, [[6, 15, 6, 21, n], [18, 15, 18, 21, n], [9, 15, 9, 21, N], [21, 15, 21, 21, N]], [[7, 15, 9, 21, n], [18, 15, 15, 21, n], [9, 15, 5, 20, N], [21, 15, 24, 20, N]]);
     for (const [x0, y0, x1, y1, c] of L) { P.line(x0, y0, x1, y1, c, 2); P.rect(x1, y1 + 2, 2, 1, hoof); }
     P.line(5, 10, 2, 13, mane, 2); P.line(2, 13, 1, 18, mane, 2);
     P.ell(13.5, 12.5, 9, 4, sh3(m, N, n)); P.ell(7.5, 12, 4, 4, sh3(m, N, n)); P.ell(19.5, 11.5, 3.6, 4.4, sh3(m, N, n));
@@ -930,7 +950,7 @@ function drawUniq(P, p, st, f) {
   } else if (st === 'tent') {
     // циклоп с дубиной
     const O = '#a08a6a', o = '#7a664c', Oh = '#bca480';
-    const lx = f === 0 ? [7, 14] : [6, 15];
+    const lx = gaitPick(f, [7, 14], [6, 15]);
     P.rect(lx[0], 19, 4, 6, o); P.rect(lx[1], 19, 4, 6, O); P.rect(lx[0] - 1, 25, 5, 1, p.B); P.rect(lx[1], 25, 5, 1, p.B);
     P.rect(2, 10, 4, 9, o); P.rect(2, 18, 4, 2, o);
     P.ell(12, 14, 8, 6.5, sh3(Oh, O, o, -0.6, 0.6));
@@ -943,7 +963,7 @@ function drawUniq(P, p, st, f) {
   } else {
     // гигантский паук под седлом
     const K = '#2e2236', k = '#1c1422', kh = '#4a3a58', E = '#ff4a3a';
-    const sh = f ? 1 : 0;
+    const sh = gaitO(f) ? 1 : 0;
     for (let i = 0; i < 4; i++) {
       const bx = 9 + i * 3, up = (i + sh) % 2;
       P.line(bx, 11, bx - 5, 6 + up, k, 1); P.line(bx - 5, 6 + up, bx - 8, 17, k, 1);
@@ -1100,6 +1120,7 @@ function buildNewTextures(scene) {
   const mons = [['wgob', 12, 16, drawWGob], ['hob', 19, 21, drawHob], ['warg', 27, 23, drawWarg], ['gnome', 12, 16, drawGnome], ['dwarf', 19, 21, drawDwarf], ['golem', 22, 26, drawGolem]];
   for (const [key, w, h, fn] of mons) {
     paintTex(scene, key + '_A', w, h, P => fn(P, 0)); paintTex(scene, key + '_B', w, h, P => fn(P, 1));
+    WALK_F.forEach((wf, i) => paintTex(scene, `${key}_W${i + 1}`, w, h, P => fn(P, wf)));
     silhouette(scene, key + '_A', key + '_X', '#ffffff');
   }
   paintTex(scene, 'den_gob', 64, 48, P => paintCamp(P, 64, 48, 33));
@@ -1136,6 +1157,7 @@ function buildNewTextures(scene) {
     const p = RACES[k].pal, st = RACES[k].style;
     const off = { house: 5, tent: 3, mound: 11 }[st] || 0;
     ['A', 'B'].forEach((fr, i) => paintTex(scene, `unq_${fr}_${k}`, 28, 29, P => { P.ctx.save(); P.ctx.translate(0, off); drawUniq(P, p, st, i); P.ctx.restore(); }));
+    WALK_F.forEach((wf, i) => paintTex(scene, `unq_W${i + 1}_${k}`, 28, 29, P => { P.ctx.save(); P.ctx.translate(0, off); drawUniq(P, p, st, wf); P.ctx.restore(); }));
     silhouette(scene, `unq_A_${k}`, `unq_X_${k}`, '#e03a3a');
     const Q = DRAGON_PAL[k];
     ['A', 'B', 'C'].forEach((fr, i) => paintTex(scene, `drg_${fr}_${k}`, 46, 30, P => { P.ctx.save(); P.ctx.translate(0, 2); drawDragon(P, Q, i); P.ctx.restore(); }));
@@ -1155,9 +1177,8 @@ function drawMonarch(P, p, st, f) {
   // хвост
   P.line(9, 18, 6, 20, M, 2); P.line(6, 20, 3, 26, M, 2); P.line(4, 25, 2, 29, M); P.px(5, 22, M2); P.px(4, 24, M2); P.px(1, 29, M);
   // ноги: дальние темнее; два кадра шага
-  const L = f === 0
-    ? [[9, 25, 9, 31, n], [24, 25, 24, 31, n], [12, 25, 12, 31, N], [27, 25, 27, 31, N]]
-    : [[10, 25, 13, 31, n], [24, 25, 20, 31, n], [12, 25, 7, 30, N], [27, 25, 31, 30, N]];
+  const L = gaitPick(f, [[9, 25, 9, 31, n], [24, 25, 24, 31, n], [12, 25, 12, 31, N], [27, 25, 27, 31, N]],
+    [[10, 25, 13, 31, n], [24, 25, 20, 31, n], [12, 25, 7, 30, N], [27, 25, 31, 30, N]]);
   for (const [x0, y0, x1, y1, c] of L) { P.line(x0, y0, x1, y1, c, 2); P.rect(x1, y1 + 2, 3, 1, hoof); P.px(x1, y1 + 1, mix(c, '#000000', 0.2)); }
   // туловище, круп, грудь
   P.ell(18.5, 20.5, 12, 5.4, sh3(mh, N, n, -0.45, 0.5));
@@ -1318,7 +1339,7 @@ function drawRanged(P, p, st, f) {
 
 // ---------- маг (20×28), кадр C — заклинание ----------
 function drawMage(P, p, st, f) {
-  const cast = f === 2, hem = f === 1 ? 1 : 0, orb = p.G;
+  const cast = f === 2, hem = gaitO(f), orb = p.G;
   if (st === 'house') {
     P.poly([[6, 10], [14, 10], [16, 27], [4 - hem, 27]], p.C);
     P.rect(6, 10, 1, 17, p.c); P.rect(5 - hem, 26, 11 + hem, 1, p.c);
@@ -1334,7 +1355,7 @@ function drawMage(P, p, st, f) {
     P.poly([[5, 10], [15, 10], [16, 24], [4 - hem, 24]], p.L);
     P.rect(5, 10, 1, 14, p.l); for (let x = 4 - hem; x < 16; x += 2) P.px(x, 24, p.l);
     P.rect(6, 12, 8, 9, p.S); P.line(6, 12, 13, 19, p.D); P.px(10, 15, p.W); P.px(9, 16, p.W); P.px(11, 14, p.W);
-    legs(P, 7, 11, 24, 3, f === 1 ? 1 : 0, p.c, p.c, p.B);
+    legs(P, 7, 11, 24, 3, f === 2 ? 0 : f, p.c, p.c, p.B);
     // маска-череп и перья
     P.rect(6, 2, 8, 8, BONE); P.rect(7, 5, 2, 2, INK); P.rect(11, 5, 2, 2, INK); P.px(7, 5, orb); P.px(11, 5, orb);
     P.rect(8, 9, 4, 1, '#9a8f7c'); P.px(9, 9, INK); P.px(11, 9, INK); P.px(10, 7, '#9a8f7c');
@@ -1360,7 +1381,7 @@ function drawMage(P, p, st, f) {
 // ---------- рабочий (20×25) ----------
 function drawBuilder(P, p, st, fr) {
   const hat = '#c9a85a', hat2 = '#a08440', hat3 = '#ddc078', shirt = '#c9b48a', shirtD = '#a8936a', trou = '#5e5040', apron = '#7a5a3a';
-  legs(P, 7, 11, 19, 5, fr === 'walk1' ? 1 : 0, trou, mix(trou, '#000000', 0.25), p.B);
+  legs(P, 7, 11, 19, 5, BLD_F(fr), trou, mix(trou, '#000000', 0.25), p.B);
   P.rect(6, 11, 8, 8, shirt); P.rect(6, 11, 1, 8, shirtD); P.rect(9, 13, 5, 6, apron); P.rect(9, 13, 5, 1, '#8a6a46'); P.px(11, 16, '#5a4028');
   P.rect(6, 14, 8, 1, p.B); P.px(12, 14, '#c9a26a');
   P.rect(7, 5, 6, 6, p.S); P.rect(7, 10, 6, 1, p.s); P.px(11, 7, p.E); P.px(13, 8, p.s); P.px(12, 8, p.S); P.rect(6, 6, 1, 4, p.H);
@@ -1369,7 +1390,7 @@ function drawBuilder(P, p, st, fr) {
   if (st === 'mound') { P.rect(3, 6, 4, 1, p.S); P.px(2, 5, p.S); P.px(13, 7, p.S); P.px(14, 7, p.s); }
   // соломенная шляпа
   P.rect(5, 4, 10, 1, hat); P.rect(6, 1, 8, 3, hat); P.rect(6, 3, 8, 1, hat2); P.px(14, 4, hat2); P.rect(7, 1, 3, 1, hat3); P.px(5, 4, hat2);
-  if (fr === 'walk0' || fr === 'walk1') {
+  if (BLD_WALK(fr)) {
     P.rect(13, 12, 1, 4, shirt); P.px(13, 16, p.S);
     P.rect(4, 15, 1, 5, p.D); P.rect(3, 14, 4, 2, STONE); P.px(3, 14, STONE2);
   } else if (fr === 'work0') {
@@ -1383,6 +1404,7 @@ function drawBuilder(P, p, st, fr) {
 
 // ---------- чудовища: бес (15×20), громила (24×26), демон (28×33) ----------
 function drawImp(P, f, Q = FOE_PAL, tame) {
+  f = gaitO(f) ? 1 : 0;
   const X = Q.X, x = Q.x, x2 = Q.x2, m = '#9a8f7c', E = Q.E;
   // рваный балахон
   P.poly([[2, 7], [12, 7], [15, 19], [0, 19]], X);
@@ -1399,6 +1421,7 @@ function drawImp(P, f, Q = FOE_PAL, tame) {
   if (tame) { P.rect(3, 8, 9, 1, tame.K); P.px(7, 9, tame.K); }
 }
 function drawBrute(P, f, Q = FOE_PAL, tame) {
+  f = gaitO(f) ? 1 : 0;
   const X = Q.X, x = Q.x, x2 = Q.x2, m = '#9a8f7c', E = Q.E;
   // рога
   P.rect(1, 0, 4, 5, BONE); P.rect(19, 0, 4, 5, BONE); P.px(0, 0, BONE); P.px(23, 0, BONE); P.px(3, 5, m); P.px(20, 5, m); P.px(2, 2, '#c8bda6'); P.px(21, 2, '#c8bda6');
@@ -1417,6 +1440,7 @@ function drawBrute(P, f, Q = FOE_PAL, tame) {
   if (tame) { P.rect(4, 11, 16, 1, tame.K); P.rect(10, 12, 4, 2, tame.K); }
 }
 function drawFiend(P, f, Q = FOE_PAL, tame) {
+  f = gaitO(f) ? 1 : 0;
   const X = Q.fX, x = Q.fx, x2 = Q.fx2, wing = Q.wing, wl = Q.wl, m = '#9a8f7c', E = Q.fE;
   const up = f === 0 ? 0 : 4;
   // крылья с перепонками
@@ -1451,7 +1475,7 @@ const DW = {
   // монарх на боевом баране (38×35)
   mon(P, p, f) {
     const W1 = '#ddd2b6', W2 = '#bcae8e', W3 = '#8f8466', hoof = '#221d18', horn = '#cdbd8c', horn2 = '#8f7f58';
-    const L = f === 0 ? [[10, 26, 10, 31], [25, 26, 25, 31], [13, 26, 13, 31], [28, 26, 28, 31]] : [[11, 26, 13, 31], [25, 26, 22, 31], [13, 26, 9, 31], [28, 26, 31, 31]];
+    const L = gaitPick(f, [[10, 26, 10, 31], [25, 26, 25, 31], [13, 26, 13, 31], [28, 26, 28, 31]], [[11, 26, 13, 31], [25, 26, 22, 31], [13, 26, 9, 31], [28, 26, 31, 31]]);
     L.forEach(([x0, y0, x1, y1], i) => { P.line(x0, y0, x1, y1, i < 2 ? W3 : '#a39678', 3); P.rect(x1, y1 + 1, 3, 2, hoof); });
     P.ell(6.5, 20, 2.6, 2.6, W2); P.px(5, 19, W1);
     P.ell(18.5, 21.5, 12.5, 6.2, sh3(W1, W2, W3, -0.4, 0.5));
@@ -1516,7 +1540,7 @@ const DW = {
   },
   // рунный мастер: лысый, белая борода до пояса, посох-молот с руной (20×28)
   mag(P, p, f) {
-    const cast = f === 2, hem = f === 1 ? 1 : 0;
+    const cast = f === 2, hem = gaitO(f);
     P.poly([[5, 13], [15, 13], [16, 27], [4 - hem, 27]], p.C);
     P.rect(5, 13, 1, 14, p.c); P.rect(4 - hem, 26, 12 + hem, 1, p.c);
     P.rect(5, 19, 10, 1, p.K); for (const [x, y] of [[7, 22], [11, 23], [9, 25], [13, 21]]) { P.px(x, y, p.G); P.px(x + 1, y, p.K); }
@@ -1534,13 +1558,13 @@ const DW = {
   // каменщик: шахтёрская каска с фонарём, кирка (20×25)
   bld(P, p, fr) {
     const shirt = '#8a6a4a', apron = '#5a4632', trou = '#4a4038';
-    legs(P, 7, 11, 21, 3, fr === 'walk1' ? 1 : 0, trou, loC(trou), p.B, 3);
+    legs(P, 7, 11, 21, 3, BLD_F(fr), trou, loC(trou), p.B, 3);
     P.rect(5, 13, 10, 8, shirt); P.rect(5, 13, 1, 8, loC(shirt)); P.rect(8, 15, 6, 6, apron); P.rect(8, 15, 6, 1, hiC(apron)); P.rect(5, 17, 10, 1, p.B);
     P.rect(7, 7, 6, 4, p.S); P.px(11, 8, p.E); P.px(13, 9, p.s);
     P.rect(6, 4, 8, 4, '#d8a838'); P.rect(6, 7, 9, 1, '#a07a20'); P.rect(7, 3, 6, 1, '#d8a838'); P.px(7, 4, '#f2d070');
     P.rect(12, 4, 3, 2, '#fff1b0'); P.px(14, 4, '#ffffff');
     P.rect(6, 10, 8, 3, p.H); P.rect(7, 13, 6, 1, p.H); P.px(8, 11, hiC(p.H)); P.px(10, 14, p.H);
-    if (fr === 'walk0' || fr === 'walk1') { P.rect(3, 13, 2, 6, shirt); P.rect(2, 11, 5, 3, STONE); P.px(2, 11, STONE2); P.px(5, 13, STONE3); }
+    if (BLD_WALK(fr)) { P.rect(3, 13, 2, 6, shirt); P.rect(2, 11, 5, 3, STONE); P.px(2, 11, STONE2); P.px(5, 13, STONE3); }
     else if (fr === 'work0') { P.rect(14, 9, 2, 4, shirt); P.rect(15, 2, 1, 8, p.D); P.line(12, 2, 18, 1, STONE2); P.px(12, 3, STONE3); P.px(18, 2, STONE3); }
     else if (fr === 'work1') { P.rect(14, 14, 3, 2, shirt); P.rect(17, 14, 3, 1, p.D); P.line(18, 10, 19, 19, STONE2); }
     else if (fr === 'fish') { P.rect(14, 13, 3, 1, shirt); P.line(16, 12, 19, 0, p.D); }
@@ -1564,7 +1588,7 @@ const DW = {
   // боевой медведь в броне (27×24)
   bst(P, p, f) {
     const B1 = '#7a5236', B2 = '#5c3c26', B3 = '#946848', claw = BONE;
-    const lx = f === 0 ? [[5, B2], [9, B1], [17, B2], [21, B1]] : [[4, B2], [10, B1], [16, B2], [22, B1]];
+    const lx = gaitPick(f, [[5, B2], [9, B1], [17, B2], [21, B1]], [[4, B2], [10, B1], [16, B2], [22, B1]]);
     for (const [x, c] of lx) { P.rect(x, 17, 3, 6, c); P.rect(x, 23, 4, 1, loC(c)); P.px(x + 3, 23, claw); }
     P.ell(13, 14, 10.5, 6.5, sh3(B3, B1, B2, -0.5, 0.5)); P.ell(5, 13, 3, 4, B1);
     P.ell(22, 11, 4.5, 4.2, sh3(B3, B1, B2)); P.rect(24, 11, 3, 3, B3); P.px(26, 11, INK); P.px(22, 9, INK); P.px(21, 7, B2); P.px(19, 7, B2); P.px(20, 8, B3);
@@ -1577,7 +1601,7 @@ const DW = {
   // железный голем с рунами (28×29)
   unq(P, p, f) {
     const I = '#6c747c', i2 = '#4e555c', i3 = '#8f98a0', glow = p.G;
-    const lx = f === 0 ? [7, 15] : [6, 16];
+    const lx = gaitPick(f, [7, 15], [6, 16]);
     P.rect(lx[0], 21, 5, 7, i2); P.rect(lx[1], 21, 5, 7, I); P.rect(lx[0] - 1, 27, 7, 2, i2); P.rect(lx[1], 27, 7, 2, i2);
     P.rect(4, 8, 20, 14, I); P.rect(4, 8, 20, 1, i3); P.rect(4, 8, 1, 14, i3); P.rect(23, 8, 1, 14, i2);
     for (const [x, y] of [[6, 10], [21, 10], [6, 19], [21, 19], [13, 20]]) P.px(x, y, i3);
@@ -1611,7 +1635,7 @@ const EL = {
   // монарх на белом олене (38×35)
   mon(P, p, f) {
     const D1 = '#ece6da', D2 = '#c8bfae', D3 = '#9c9282', hoof = '#4a4038', ant = '#c8a870', ant2 = '#9a7a48';
-    const L = f === 0 ? [[11, 24, 11, 31], [25, 24, 25, 31], [14, 24, 14, 31], [28, 24, 28, 31]] : [[12, 24, 15, 31], [25, 24, 21, 31], [14, 24, 9, 30], [28, 24, 32, 30]];
+    const L = gaitPick(f, [[11, 24, 11, 31], [25, 24, 25, 31], [14, 24, 14, 31], [28, 24, 28, 31]], [[12, 24, 15, 31], [25, 24, 21, 31], [14, 24, 9, 30], [28, 24, 32, 30]]);
     L.forEach(([x0, y0, x1, y1], i) => { P.line(x0, y0, x1, y1, i < 2 ? D3 : D2, 2); P.rect(x1, y1 + 2, 2, 1, hoof); P.px(x1, y1 + 1, loC(i < 2 ? D3 : D2)); });
     P.rect(7, 16, 3, 3, BONE); P.px(7, 16, '#ffffff');
     P.ell(19, 19.5, 11, 5, sh3('#ffffff', D1, D2, -0.45, 0.5)); P.ell(11, 19, 4.4, 4.6, sh3('#ffffff', D1, D2)); P.ell(26, 18.5, 4, 5.2, sh3('#ffffff', D1, D2));
@@ -1666,7 +1690,7 @@ const EL = {
   },
   // друид: венец из рогов, посох-ветвь с листьями (20×28)
   mag(P, p, f) {
-    const cast = f === 2, hem = f === 1 ? 1 : 0;
+    const cast = f === 2, hem = gaitO(f);
     P.poly([[6, 9], [13, 9], [16, 27], [3 - hem, 27]], '#6a5232');
     P.poly([[7, 9], [12, 9], [13, 27], [6, 27]], p.C); P.rect(6, 9, 1, 18, '#4a3a22');
     for (let x = 3 - hem; x < 16; x += 2) P.px(x, 27, p.Y);
@@ -1686,12 +1710,12 @@ const EL = {
   // садовник: листовая шапочка, корзина и садовые ножницы (20×25)
   bld(P, p, fr) {
     const tun = '#7a9a4a', tunD = '#5a7a34', trou = '#6a5a3a';
-    legs(P, 8, 11, 17, 7, fr === 'walk1' ? 1 : 0, trou, loC(trou), p.B, 2);
+    legs(P, 8, 11, 17, 7, BLD_F(fr), trou, loC(trou), p.B, 2);
     P.rect(7, 9, 6, 9, tun); P.rect(7, 9, 1, 9, tunD); P.rect(7, 13, 6, 1, p.B); P.px(11, 13, p.K);
     P.rect(9, 3, 4, 6, p.S); P.px(12, 5, p.E); P.px(13, 6, p.S); P.rect(9, 8, 4, 1, p.s);
     P.px(8, 4, p.S); P.px(7, 3, p.S);
     P.rect(8, 2, 5, 2, '#5a8a3a'); P.px(13, 1, '#5a8a3a'); P.px(14, 0, '#7ab85a'); P.rect(7, 4, 2, 4, p.H); P.px(9, 1, '#7ab85a');
-    if (fr === 'walk0' || fr === 'walk1') { P.rect(5, 10, 2, 5, tun); P.rect(2, 13, 6, 4, '#a0783a'); P.rect(2, 13, 6, 1, '#c8a050'); P.px(3, 12, STONE2); P.px(5, 12, STONE); }
+    if (BLD_WALK(fr)) { P.rect(5, 10, 2, 5, tun); P.rect(2, 13, 6, 4, '#a0783a'); P.rect(2, 13, 6, 1, '#c8a050'); P.px(3, 12, STONE2); P.px(5, 12, STONE); }
     else if (fr === 'work0') { P.rect(13, 6, 2, 4, tun); P.line(14, 5, 17, 0, '#cdd3d9'); P.line(15, 5, 18, 2, '#cdd3d9'); P.rect(13, 5, 2, 2, '#6a4a2a'); }
     else if (fr === 'work1') { P.rect(13, 11, 3, 1, tun); P.line(16, 11, 19, 16, '#cdd3d9'); P.line(16, 12, 18, 17, '#cdd3d9'); }
     else if (fr === 'fish') { P.rect(13, 10, 3, 1, tun); P.line(16, 9, 19, 0, '#8a6a3a'); }
@@ -1715,7 +1739,7 @@ const EL = {
   // энт: ходячее дерево (27×24)
   bst(P, p, f) {
     const B1 = '#6a4a2a', B2 = '#4a3218', B3 = '#8a6a3a', L1 = '#4f8a3a', L2 = '#3a6a2a', L3 = '#7ab85a';
-    const lx = f === 0 ? [[7, 0], [15, 0]] : [[6, -1], [16, 1]];
+    const lx = gaitPick(f, [[7, 0], [15, 0]], [[6, -1], [16, 1]]);
     for (const [x, o] of lx) { P.rect(x, 17, 4, 5, B2); P.line(x, 22, x - 2 + o, 23, B2); P.line(x + 3, 22, x + 5 + o, 23, B2); P.px(x + 1, 23, B2); }
     P.rect(7, 7, 12, 11, B1); P.rect(7, 7, 2, 11, B3); P.rect(17, 7, 2, 11, B2);
     for (let y = 8; y < 17; y += 2) P.px(11 + (y % 4 ? 1 : 0), y, B2);
@@ -1730,10 +1754,10 @@ const EL = {
   // пегас (28×29)
   unq(P, p, f) {
     const N = '#f4f2ee', n = '#cfcac0', m = '#ffffff', mane = '#a0d8ff', hoof = '#8a8478', wing = '#e8f0ff', wl = '#b8c8e8';
-    const L = f === 0 ? [[7, 20, 7, 25, n], [19, 20, 19, 25, n], [10, 20, 10, 25, N], [22, 20, 22, 25, N]] : [[8, 20, 10, 25, n], [19, 20, 16, 25, n], [10, 20, 6, 24, N], [22, 20, 25, 24, N]];
+    const L = gaitPick(f, [[7, 20, 7, 25, n], [19, 20, 19, 25, n], [10, 20, 10, 25, N], [22, 20, 22, 25, N]], [[8, 20, 10, 25, n], [19, 20, 16, 25, n], [10, 20, 6, 24, N], [22, 20, 25, 24, N]]);
     for (const [x0, y0, x1, y1, c] of L) { P.line(x0, y0, x1, y1, c, 2); P.rect(x1, y1 + 2, 2, 1, hoof); }
     P.line(6, 15, 3, 18, mane, 2); P.line(3, 18, 2, 23, mane, 2);
-    const up = f ? 0 : 1;
+    const up = gaitO(f) ? 0 : 1;
     if (up) P.poly([[10, 15], [6, 2], [12, 0], [18, 6], [17, 14]], wl); else P.poly([[10, 15], [3, 9], [8, 5], [18, 9], [17, 15]], wl);
     P.ell(14.5, 17.5, 9, 4, sh3(m, N, n)); P.ell(8.5, 17, 4, 4, sh3(m, N, n)); P.ell(20.5, 16.5, 3.6, 4.4, sh3(m, N, n));
     P.poly([[18, 17], [20, 11], [22, 8], [25, 7], [26, 11], [24, 17]], N);
@@ -1766,7 +1790,7 @@ const UD = {
   mon(P, p, f) {
     const N = '#2e2a34', n = '#1e1a22', bone = '#d8d0b8', bone2 = '#a8a08a', fire = p.G;
     P.line(9, 18, 6, 20, fire, 2); P.line(6, 20, 3, 26, fire, 2); P.px(2, 28, fire); P.px(4, 23, '#d0ffe0');
-    const L = f === 0 ? [[9, 25, 9, 31], [24, 25, 24, 31], [12, 25, 12, 31], [27, 25, 27, 31]] : [[10, 25, 13, 31], [24, 25, 20, 31], [12, 25, 7, 30], [27, 25, 31, 30]];
+    const L = gaitPick(f, [[9, 25, 9, 31], [24, 25, 24, 31], [12, 25, 12, 31], [27, 25, 27, 31]], [[10, 25, 13, 31], [24, 25, 20, 31], [12, 25, 7, 30], [27, 25, 31, 30]]);
     for (const [x0, y0, x1, y1] of L) { P.line(x0, y0, x1, y1, bone2, 1); P.line(x0 + 1, y0, x1 + 1, y1, bone, 1); P.rect(x1, y1 + 2, 3, 1, n); P.px(x1, y1 + 1, bone2); }
     P.ell(18.5, 20.5, 12, 5.4, sh3('#3e3a44', N, n, -0.45, 0.5)); P.ell(10.5, 20, 5.6, 5.6, N); P.ell(26, 19.5, 4.8, 5.8, N);
     for (let x = 14; x < 25; x += 2) P.line(x, 17, x - 1, 24, bone2);
@@ -1794,7 +1818,7 @@ const UD = {
   // скелет-воин: шлем, щит с черепом, ржавый меч (20×25)
   mel(P, p, f) {
     const b = '#ddd5bd', b2 = BONE2, rust = '#8a5a3a';
-    const o = f === 1 ? 1 : 0;
+    const o = gaitO(f);
     P.line(8 - o, 17, 8 - o, 23, b2); P.line(11 + o, 17, 11 + o, 23, b); P.rect(7 - o, 24, 3, 1, b2); P.rect(11 + o, 24, 3, 1, b);
     P.rect(7, 15, 6, 2, b2); P.px(9, 16, INK); P.px(10, 16, INK);
     P.rect(9, 9, 2, 7, b);
@@ -1812,7 +1836,7 @@ const UD = {
   // скелет-лучник в рваном капюшоне (20×25)
   rng(P, p, f) {
     const b = '#ddd5bd', b2 = BONE2;
-    const o = f === 1 ? 1 : 0;
+    const o = gaitO(f);
     P.line(8 - o, 17, 8 - o, 23, b2); P.line(11 + o, 17, 11 + o, 23, b); P.rect(7 - o, 24, 3, 1, b2); P.rect(11 + o, 24, 3, 1, b);
     P.rect(3, 9, 3, 8, '#3a2a2a'); P.px(3, 8, b); P.px(5, 8, b); P.px(4, 7, p.G);
     P.poly([[6, 8], [13, 8], [14, 17], [5, 18]], p.c); for (let x = 5; x < 14; x += 2) P.px(x, 18, p.c);
@@ -1826,7 +1850,7 @@ const UD = {
   },
   // некромант: чёрная ряса, череп в капюшоне, посох с черепом (20×28)
   mag(P, p, f) {
-    const cast = f === 2, hem = f === 1 ? 1 : 0, b = '#ddd5bd';
+    const cast = f === 2, hem = gaitO(f), b = '#ddd5bd';
     P.poly([[6, 9], [14, 9], [16, 27], [4 - hem, 27]], '#221c2a'); P.poly([[8, 9], [12, 9], [13, 27], [7, 27]], p.C);
     for (let x = 4 - hem; x < 16; x += 2) P.px(x, 27 - (x % 4 ? 1 : 0), '#221c2a');
     P.rect(6, 16, 8, 1, p.K); P.rect(9, 17, 2, 3, b); P.px(9, 18, INK);
@@ -1843,12 +1867,12 @@ const UD = {
   // зомби-рабочий с лопатой (20×25)
   bld(P, p, fr) {
     const sk = '#8a9a78', sk2 = '#6a7a5a', rag = '#5a4a3a', rag2 = '#3a3028', trou = '#4a4038';
-    legs(P, 7, 11, 19, 5, fr === 'walk1' ? 1 : 0, trou, loC(trou), '#2a2018');
+    legs(P, 7, 11, 19, 5, BLD_F(fr), trou, loC(trou), '#2a2018');
     P.rect(6, 11, 8, 8, rag); P.rect(6, 11, 1, 8, rag2); for (let x = 6; x < 14; x++) P.px(x, 19 - (x % 2), rag);
     P.px(9, 13, sk); P.px(11, 15, sk2); P.rect(6, 15, 8, 1, rag2);
     P.rect(7, 5, 6, 6, sk); P.rect(7, 10, 6, 1, sk2); P.px(11, 7, '#e8f0a0'); P.px(9, 7, '#e8f0a0'); P.px(13, 8, sk2); P.rect(9, 9, 3, 1, '#3a2a2a'); P.px(10, 9, BONE);
     P.rect(6, 4, 7, 2, '#3a3a32'); P.px(6, 6, '#3a3a32'); P.px(12, 4, sk2); P.px(8, 6, sk2);
-    if (fr === 'walk0' || fr === 'walk1') { P.rect(13, 12, 3, 1, sk); P.px(16, 12, sk); P.px(17, 12, sk2); P.rect(3, 14, 1, 6, '#4a3a2a'); P.rect(2, 12, 4, 3, STONE); P.px(2, 12, STONE2); }
+    if (BLD_WALK(fr)) { P.rect(13, 12, 3, 1, sk); P.px(16, 12, sk); P.px(17, 12, sk2); P.rect(3, 14, 1, 6, '#4a3a2a'); P.rect(2, 12, 4, 3, STONE); P.px(2, 12, STONE2); }
     else if (fr === 'work0') { P.rect(13, 8, 1, 4, sk); P.px(13, 7, sk); P.rect(14, 1, 1, 8, '#5a4a3a'); P.rect(13, 0, 3, 3, '#7a7a76'); P.px(13, 0, '#9a9a96'); }
     else if (fr === 'work1') { P.rect(13, 12, 3, 1, sk); P.rect(16, 12, 3, 1, '#5a4a3a'); P.rect(18, 11, 2, 5, '#7a7a76'); }
     else if (fr === 'fish') { P.rect(13, 11, 3, 1, sk); P.line(16, 10, 19, 0, '#5a4a3a'); }
@@ -1857,7 +1881,7 @@ const UD = {
     // горожане-призраки и бледные слуги
     if (v % 2 === 0) {
       const g = v ? '#c8d8e0' : '#b8e0d0', g2 = v ? '#90a8b8' : '#88b8a8';
-      P.poly([[2, 3], [8, 3], [9, 15 + f], [7, 13], [5, 16 - f], [3, 13], [1, 15]], g); P.rect(2, 3, 1, 10, g2);
+      P.poly([[2, 3], [8, 3], [9, 15 + (gaitO(f) ? 1 : 0)], [7, 13], [5, 16 - (gaitO(f) ? 1 : 0)], [3, 13], [1, 15]], g); P.rect(2, 3, 1, 10, g2);
       P.ell(5, 4, 3, 3.4, g); P.px(4, 4, INK); P.px(6, 4, INK); P.rect(4, 6, 2, 1, g2); P.px(8, 8, g2);
     } else {
       const C = v === 1 ? '#4a3a5a' : '#3a4a4a';
@@ -1869,14 +1893,14 @@ const UD = {
   },
   tax(P, f, p) {
     const g = '#b8d8e0', g2 = '#88a8b8';
-    P.poly([[2, 4], [9, 4], [10, 15 + f], [8, 13], [6, 16 - f], [4, 13], [1, 15]], g); P.rect(2, 4, 1, 10, g2);
+    P.poly([[2, 4], [9, 4], [10, 15 + (gaitO(f) ? 1 : 0)], [8, 13], [6, 16 - (gaitO(f) ? 1 : 0)], [4, 13], [1, 15]], g); P.rect(2, 4, 1, 10, g2);
     P.ell(5.5, 4.5, 3, 3.4, g); P.px(5, 4, INK); P.px(7, 4, INK); P.rect(2, 0, 7, 2, '#2a1d2a'); P.rect(1, 2, 9, 1, '#2a1d2a'); P.px(5, 0, p.K);
     P.rect(10, 6, 1, 4, '#4a4a4a'); P.rect(9, 9, 3, 3, '#7affa0'); P.px(10, 10, '#ffffff');
   },
   // вурдалак: сгорбленный великан с когтями (27×24)
   bst(P, p, f) {
     const S1 = '#9aa48a', S2 = '#727c64', S3 = '#b8c0a6', claw = '#e8e0c8';
-    const lx = f === 0 ? [6, 14] : [5, 15];
+    const lx = gaitPick(f, [6, 14], [5, 15]);
     P.rect(lx[0], 17, 3, 6, S2); P.rect(lx[1], 17, 3, 6, S1); P.rect(lx[0] - 1, 23, 5, 1, S2); P.rect(lx[1], 23, 5, 1, S2);
     P.ell(11, 12, 9, 6.5, sh3(S3, S1, S2, -0.55, 0.5));
     for (let i = 0; i < 4; i++) P.line(8 + i * 3, 10, 7 + i * 3, 15, S2);
@@ -1889,7 +1913,7 @@ const UD = {
   },
   // призрачный рыцарь: парящий балахон, коса (28×29)
   unq(P, p, f) {
-    const c1 = '#3a3248', c2 = '#241e30', c3 = '#5a4e6a', b = '#ddd5bd', g = p.G, bob = f ? 1 : 0;
+    const c1 = '#3a3248', c2 = '#241e30', c3 = '#5a4e6a', b = '#ddd5bd', g = p.G, bob = gaitO(f) ? 1 : 0;
     for (let i = 0; i < 6; i++) P.line(7 + i * 3, 22 + bob, 6 + i * 3 + (i % 2), 28, i % 2 ? 'rgba(122,255,160,0.35)' : 'rgba(122,255,160,0.2)');
     P.poly([[9, 6 + bob], [19, 6 + bob], [24, 24 + bob], [20, 22 + bob], [17, 26 + bob], [13, 22 + bob], [9, 26 + bob], [5, 22 + bob]], c1);
     P.poly([[9, 6 + bob], [13, 6 + bob], [11, 24 + bob], [7, 22 + bob]], c2); P.line(19, 7 + bob, 23, 23 + bob, c3);
@@ -3901,7 +3925,7 @@ function buildAllTextures(scene) {
   buildLightTextures(scene);
   buildLandmarkTextures(scene);
 }
-const GAME_VERSION = 'v0.16.1';
+const GAME_VERSION = 'v0.17';
 // Сложность: lazy — логова выпускают волны через ночь; dmg — урон чудовищ и вражеских воинов; raid — размер набегов
 const DIFFS = {
   easy:   { name: 'Лёгкая',  lazy: true,  dmg: 0.75, raid: 1,    desc: 'логова нападают через ночь, враги бьют на четверть слабее' },
@@ -4509,6 +4533,8 @@ class GameScene extends Phaser.Scene {
     this.flash = this.add.rectangle(0, 0, W, H, 0xeef4ff).setOrigin(0).setScrollFactor(0).setDepth(95).setAlpha(0);
     this.NIGHT = new Phaser.Display.Color(22, 32, 50);
     this.buildSkyLayers();
+    // живость персонажей — после всех обновлений кадра
+    this.events.off('postupdate'); this.events.on('postupdate', (t) => { if (!this.panelOpen) this.lifePass(t); });
 
     // интерфейс
     const hud = o => o.setScrollFactor(0).setDepth(100).setScale(o.scaleX * UI, o.scaleY * UI).setPosition(o.x * UI, o.y * UI);
@@ -5218,7 +5244,7 @@ class GameScene extends Phaser.Scene {
     const U = UNITS[kind];
     const spr = this.add.sprite(x, GROUND, `${U.tex}_A_${this.rk}`).setOrigin(0.5, 1).setScale(S).setDepth(kind === 'siege' ? 6 : 7).setAlpha(0);
     this.tweens.add({ targets: spr, alpha: 1, duration: 300 });
-    this.units.push({ spr, kind, U, target: x + Phaser.Math.Between(-60, 60), wait: 0, ft: 0, f: 0, hp: U.hp, atk: 0, flash: 0, cast: 0, mode: 'patrol', den: null, side: this.freeSide(), post: Math.random() });
+    this.units.push({ spr, kind, U, target: x + Phaser.Math.Between(-60, 60), wait: 0, ft: 0, f: 0, hp: U.hp, atk: 0, flash: 0, cast: 0, mode: 'patrol', den: null, side: this.freeSide(), post: Math.random(), spdK: 0.88 + Math.random() * 0.24, jit: Phaser.Math.Between(-16, 16) });
     this.updateHud(true);
     this.toast(kind === 'siege' ? `${this.R.units.siege} собрана` : kind === 'dragon' ? `${this.R.units.dragon} прилетел: ${this.units.filter(u => u.kind === 'dragon').length}/${MAX_DRAGON}` : `${this.unitName(kind)} в строю: ${this.armyCount()}/${this.maxUnits()}`);
     if (kind === 'dragon') { music.sfx('rage'); this.cameras.main.shake(250, 0.006); }
@@ -5333,7 +5359,7 @@ class GameScene extends Phaser.Scene {
         if (Math.abs(dx) < reach) { u.spr.setFlipX(dx < 0); if (u.atk <= 0) { u.atk = U.cd; if (U.shot) this.shoot(u, u.den.x, null, u.den); else { this.meleeFx(u.spr, u.den.x, heavy); this.damageDen(u.den, U.dmg * this.dmgMul()); } } }
         else { moveDir = Math.sign(dx); speed = Math.abs(dx) > 600 ? (u.kind === 'siege' ? 80 : 120) : U.speed; }
       } else if (guard) {
-        const dx = this.guardPost(u) - u.spr.x;
+        const dx = this.guardPost(u) + (u.jit || 0) - u.spr.x;
         if (Math.abs(dx) > 6) { moveDir = Math.sign(dx); speed = Math.abs(dx) > 400 ? (u.kind === 'siege' ? 80 : 120) : U.speed; }
         else u.spr.setFlipX(u.side < 0);
       } else if (u.wait > 0) u.wait -= dt;
@@ -5342,7 +5368,7 @@ class GameScene extends Phaser.Scene {
         if (Math.abs(dx) < 3) { u.wait = Phaser.Math.FloatBetween(0.8, 3); u.target = this.patrolTarget(u, a, b); }
         else { moveDir = Math.sign(dx); if (Math.abs(u.spr.x - c) > 1000) speed = u.kind === 'siege' ? 80 : 120; else if (u.kind === 'siege') speed = U.speed; }
       }
-      if (moveDir) { u.spr.x = this.unitStep(u, u.spr.x + moveDir * speed * dt); u.spr.setFlipX(moveDir < 0); u.ft += dt; if (u.ft > 0.18) { u.ft = 0; u.f ^= 1; } }
+      if (moveDir) { u.spr.x = this.unitStep(u, u.spr.x + moveDir * speed * (u.spdK || 1) * dt); u.spr.setFlipX(moveDir < 0); u.ft += dt; if (u.ft > 0.18) { u.ft = 0; u.f ^= 1; } }
       else u.f = 0;
       let fr = u.f ? 'B' : 'A';
       if (u.kind === 'mage' && u.cast > 0) fr = 'C';
@@ -5739,9 +5765,11 @@ class GameScene extends Phaser.Scene {
       const dxw = this.walkTo - this.player.x;
       if (Math.abs(dxw) < 8) { this.walkTo = null; }
       else { gallop = Math.abs(dxw) > 420; v = Math.sign(dxw) * Math.min(gallop ? 300 : 150, Math.abs(dxw) / dt); }
+      this.gallopNow = gallop;
     }
     this.marker.setVisible(this.walkTo != null);
     this.player.x = this.foeWallClamp(this.player.x, Phaser.Math.Clamp(this.player.x + v * dt, 20, WORLD - 20));
+    this.gallopNow = gallop;
     if (v) { this.player.setFlipX(v < 0); this.pt += dt; if (this.pt > (gallop ? 0.09 : 0.16)) { this.pt = 0; this.pf ^= 1; } }
     else this.pf = 0;
     this.player.setTexture((this.pf ? 'mon_B_' : 'mon_A_') + rk);
@@ -6160,6 +6188,7 @@ function buildFoeTextures(scene, k) {
   const p = KINGDOM_PAL(RACES[k].pal), st = RACES[k].style, sfx = `_${k}_foe`;
   for (const [key, w, h, fn, frames] of [['mel', 16, 20, drawMelee, 2], ['rng', 16, 20, drawRanged, 2], ['bst', 27, 24, drawBeast, 2], ['mag', 16, 22, drawMage, 3]]) {
     ['A', 'B', 'C'].slice(0, frames).forEach((fr, i) => paintTex(scene, `${key}_${fr}${sfx}`, w, h, P => fn(P, p, st, i)));
+    WALK_F.forEach((wf, i) => paintTex(scene, `${key}_W${i + 1}${sfx}`, w, h, P => fn(P, p, st, wf)));
     silhouette(scene, `${key}_A${sfx}`, `${key}_X${sfx}`, '#ffffff');
   }
   paintTex(scene, 'orb' + sfx, 6, 6, P => { P.ell(3, 3, 3, 3, p.G); P.ell(3, 3, 1.6, 1.6, '#ffffff'); });
@@ -7052,6 +7081,47 @@ Object.assign(GameScene.prototype, {
       ctx.restore();
     };
     this.pixelGrid = g; this.pixSmall = small;
+  },
+});
+
+// ================== ЖИВОСТЬ ПЕРСОНАЖЕЙ ==================
+// После всех обновлений кадра: ходьба в четыре кадра (шаг, перенос, шаг другой ногой, перенос),
+// покачивание тела при ходьбе и лёгкое дыхание на месте. Кадр шага привязан к пройденному пути,
+// поэтому ноги не «скользят» ни на медленном шаге, ни на бегу.
+const TEX_HAS = new Map();
+Object.assign(GameScene.prototype, {
+  hasTex(k) { let v = TEX_HAS.get(k); if (v === undefined) { v = this.textures.exists(k); TEX_HAS.set(k, v); } return v; },
+  // o — состояние существа; walkKey(n) — ключ кадра ходьбы n = 1..4; isWalkTex — текущая текстура обычной ходьбы
+  life(o, spr, t, walkKey, isWalkTex, stride = 11, baseY = GROUND, pose = true) {
+    if (!spr || !spr.active) return;
+    const dx = o.lpx === undefined ? 0 : Math.abs(spr.x - o.lpx); o.lpx = spr.x;
+    const moving = dx > 0.15 && dx < 60;
+    if (o.lph === undefined) o.lph = Math.random() * 6.28;
+    if (moving) {
+      o.lwf = ((o.lwf || 0) + dx / stride) % 4;
+      const n = Math.floor(o.lwf) + 1, k = walkKey(n);
+      if (isWalkTex(spr.texture.key) && this.hasTex(k)) spr.setTexture(k);
+      if (pose) { spr.y = baseY - ((n === 2 || n === 4) ? 2 : 0); spr.scaleY = spr.scaleX; }
+    } else if (pose) {
+      spr.y = baseY; spr.scaleY = spr.scaleX * (1 + 0.016 * Math.sin(t * 0.0025 + o.lph));
+    }
+  },
+  lifePass(t) {
+    const rk = this.rk;
+    // монарх: на галопе шаг длиннее
+    { const k = this.player.texture.key; this.life(this.plife || (this.plife = {}), this.player, t, n => `mon_W${n}_${rk}`, kk => kk === `mon_A_${rk}` || kk === `mon_B_${rk}`, this.gallopNow ? 26 : 13); }
+    for (const u of this.units) {
+      if (u.kind === 'dragon' || u.kind === 'siege') continue;
+      const tx = u.U.tex; this.life(u, u.spr, t, n => `${tx}_W${n}_${rk}`, kk => kk === `${tx}_A_${rk}` || kk === `${tx}_B_${rk}`, u.kind === 'beast' || u.kind === 'uniq' ? 15 : 11);
+    }
+    for (const b of this.builders) this.life(b, b.spr, t, n => `bld_wk${n}_${rk}`, kk => kk === `bld_walk0_${rk}` || kk === `bld_walk1_${rk}`, 11, GROUND, !b.carryImg);
+    for (const e of this.enemies) {
+      if (e.dead) continue;
+      const pose = e.theme !== 'gob' && e.theme !== 'gnome';
+      this.life(e, e.spr, t, n => `${e.tk}_W${n}${e.ts}`, kk => kk === `${e.tk}_A${e.ts}` || kk === `${e.tk}_B${e.ts}`, e.kind === 'fiend' || e.kind === 'brute' ? 14 : 10, GROUND, pose);
+    }
+    if (this.collectors) for (const c of this.collectors) this.life(c, c.spr, t, n => `tax_W${n}_${rk}`, kk => kk === `tax_A_${rk}` || kk === `tax_B_${rk}`, 9);
+    if (this.cityParts) for (const v of this.cityParts.vills) if (v.spr.visible) this.life(v, v.spr, t, n => `vil_W${n}_${v.v}_${rk}`, kk => kk === `vil_A_${v.v}_${rk}` || kk === `vil_B_${v.v}_${rk}`, 7, GROUND + 2);
   },
 });
 
