@@ -41,6 +41,8 @@ const WORLD = 30000;             // ширина мира
 const PLAYER_X = 7000;           // наш замок
 const ENEMY_X = 23000;           // вражеский замок
 const S = 3;                     // во сколько раз увеличиваем пиксели
+// множители длины дня и ночи по сезонам: весна, лето, осень, зима
+const DAY_K = [1.2, 1.3, 1.0, 0.8], NIGHT_K = [0.85, 0.75, 1.0, 1.25];
 const CYCLE = 170;               // длина суток в секундах
 const SEASON_LEN = 5;            // сколько ночей длится сезон
 const WALLET = 30;               // сколько монет помещается в кошелёк
@@ -50,7 +52,8 @@ const DENS = [[1200, 2], [3900, 1], [10300, 2], [15000, 3], [19700, 2], [26100, 
 const HUTS = [2600, 5300, 8900, 12600];   // хижины бродяг на нашей половине
 const SPOTS = { guild: -700, dwell: -420, hall: 0, bank: 260, farm: 480, forge: 720 };
 // Линии стен по сторонам: первая стоит сразу, следующие открываются после захвата логова силы 1, 2, 3
-const WALL_LINES = { '-1': [940, 3500, 6200], '1': [940, 3700, 8400, 13100] };
+// линии стен: каждая следующая открывается, когда построена предыдущая и до неё нет живых логов
+const WALL_LINES = { '-1': [940, 2200, 3500, 4700, 6200], '1': [940, 2400, 3700, 5000, 6700, 8400, 10600, 13100] };
 const RETINUE_CALM = 25;         // через сколько секунд без боя свита расходится
 const FONT = '"Pixelify Sans", ui-monospace, monospace';
 const TXT = { fontFamily: FONT, fontSize: '18px', color: '#efe3c2', stroke: '#141d21', strokeThickness: 4, resolution: 2 };
@@ -109,6 +112,24 @@ const RACES = {
     units: { melee: 'Копейщик', ranged: 'Пращник', beast: 'Тролль', mage: 'Колдун', siege: 'Требушет', uniq: 'Гигантский паук', dragon: 'Зелёный дракон' }, uniqhome: 'Паучье гнездо',
     pal: { K:'#e09a3e', k:'#a86a22', S:'#b6c24a', s:'#8c9832', E:'#20160f', H:'#3e3a1f', C:'#6a3f86', c:'#472a5b', Y:'#8c5cb0', B:'#2d2218',
            A:'#7f6a4a', a:'#56472f', Q:'#a08a62', W:'#d0a066', R:'#4f6b3a', r:'#344a26', L:'#8c7a58', l:'#5e5139', D:'#2d2218', G:'#8aff6a' } },
+  dwarf: { name: 'Гномы', hall: 'Каменный чертог', castle: 'Горная крепость', citadel: 'Подгорный трон', builder: 'Каменщик', style: 'dwarf', look: 'dwarf',
+    dwell: 'Казарма хирда', dwell2: 'Казарма арбалетчиков', dwell3: 'Медвежья берлога',
+    forge: 'Кузня', forge2: 'Рунная кузня', guild: 'Рунный круг', guild2: 'Башня рун', bank: 'Сокровищница', tax: 'Казначей', outpost: 'Драконья пещера', tower: 'Дозор', tower2: 'Каменный дозор',
+    units: { melee: 'Хирдманн', ranged: 'Арбалетчик', beast: 'Боевой медведь', mage: 'Рунный мастер', siege: 'Пушка', uniq: 'Железный голем', dragon: 'Бронзовый дракон' }, uniqhome: 'Кузня големов',
+    pal: { K:'#e0a83a', k:'#a8742a', S:'#e0a888', s:'#b87a5a', E:'#1a1410', H:'#b0502a', C:'#2f6a6a', c:'#1f4a4a', Y:'#4a9090', B:'#3a2a1e',
+           A:'#8a929a', a:'#5c636b', Q:'#c0c8ce', W:'#e8ecee', R:'#5a6470', r:'#3a424c', L:'#a8a294', l:'#78726a', D:'#4a3a2c', G:'#ffb040', look: 'dwarf' } },
+  elf: { name: 'Эльфы', hall: 'Древесный дом', castle: 'Лесной дворец', citadel: 'Древний чертог', builder: 'Садовник', style: 'elf', look: 'elf',
+    dwell: 'Поляна', dwell2: 'Поляна лучников', dwell3: 'Роща энтов',
+    forge: 'Мастерская', forge2: 'Лунная кузня', guild: 'Круг друидов', guild2: 'Звёздная башня', bank: 'Хранилище', tax: 'Собиратель', outpost: 'Заповедник', tower: 'Лесной пост', tower2: 'Каменный пост',
+    units: { melee: 'Страж рощи', ranged: 'Лучник', beast: 'Энт', mage: 'Друид', siege: 'Скорпион', uniq: 'Пегас', dragon: 'Лунный дракон' }, uniqhome: 'Гнездовье пегасов',
+    pal: { K:'#e8e0a0', k:'#b0a860', S:'#f0d4b4', s:'#c8a888', E:'#2a5a3a', H:'#e8d080', C:'#3e8a4a', c:'#2a5e34', Y:'#6ab86a', B:'#4a3a26',
+           A:'#b8c4a8', a:'#80907a', Q:'#e0e8d0', W:'#f4f0e0', R:'#5a8a3a', r:'#3a6026', L:'#a8b878', l:'#78885a', D:'#3a2e1e', G:'#a0ffd0', look: 'elf' } },
+  undead: { name: 'Нежить', hall: 'Склеп', castle: 'Некрополь', citadel: 'Чёрная цитадель', builder: 'Зомби', style: 'undead', look: 'undead',
+    dwell: 'Кладбище', dwell2: 'Кладбище лучников', dwell3: 'Склеп вурдалаков',
+    forge: 'Костоплавильня', forge2: 'Тёмная кузня', guild: 'Склеп некромантов', guild2: 'Башня смерти', bank: 'Гробница', tax: 'Мытарь-призрак', outpost: 'Мертвецкая', tower: 'Сторожевой склеп', tower2: 'Костяная башня',
+    units: { melee: 'Скелет-воин', ranged: 'Скелет-лучник', beast: 'Вурдалак', mage: 'Некромант', siege: 'Костемёт', uniq: 'Призрачный рыцарь', dragon: 'Костяной дракон' }, uniqhome: 'Чёрный склеп',
+    pal: { K:'#9a8ab8', k:'#6a5a8a', S:'#c8c8b0', s:'#909080', E:'#7affa0', H:'#3a3a3a', C:'#3a3048', c:'#241e30', Y:'#5e4e78', B:'#1e1a22',
+           A:'#5a5a62', a:'#3a3a42', Q:'#8a8a92', W:'#e8e4d0', R:'#4a3a5a', r:'#2e2238', L:'#6a6470', l:'#46424c', D:'#2a2228', G:'#7affa0', look: 'undead' } },
 };
 
 // Вражеское королевство
@@ -720,7 +741,7 @@ function buildCharTextures(scene) {
 const DEN_THEMES = {
   imp:   { name: 'Логово бесов',    tex: ['imp', 'brute', 'fiend'], glow: 'glow_red' },
   gob:   { name: 'Лагерь дикарей',  tex: ['wgob', 'hob', 'warg'],   glow: 'glow_fire' },
-  gnome: { name: 'Шахта гномов',    tex: ['gnome', 'dwarf', 'golem'], glow: 'glow_fire' },
+  gnome: { name: 'Шахта кобольдов',    tex: ['gnome', 'dwarf', 'golem'], glow: 'glow_fire' },
 };
 const THEME_KIND = { imp: 0, brute: 1, fiend: 2 };
 const WILD_GOB = { g: '#6f7f45', gd: '#4f5c30', gh: '#8c9c5a', rag: '#6a4a30', ragd: '#4a3220', e: '#ffd23a' };
@@ -890,6 +911,9 @@ const DRAGON_PAL = {
   human:  { name: 'Золотой дракон',  D: '#d8a838', d: '#9c7424', h: '#f2d070', b: '#f2e2a8', w: '#b8862a', wl: '#e8c060', E: '#3a5f9e' },
   orc:    { name: 'Красный дракон',  D: '#b8342a', d: '#7a1e18', h: '#e05a44', b: '#e8b07a', w: '#8a2a20', wl: '#d04a3a', E: '#ffd23a' },
   goblin: { name: 'Зелёный дракон',  D: '#4f8a3a', d: '#2f5a24', h: '#7ab85a', b: '#c8d890', w: '#3a6a2c', wl: '#6aa84a', E: '#ff6a3a' },
+  dwarf:  { name: 'Бронзовый дракон', D: '#b8783a', d: '#7a4a20', h: '#e0a060', b: '#e8c898', w: '#8a5a2a', wl: '#c88a4a', E: '#40e0ff' },
+  elf:    { name: 'Лунный дракон',   D: '#b8c8dc', d: '#7888a4', h: '#eef2ff', b: '#e8f0f8', w: '#6878a4', wl: '#a8b8e0', E: '#40c0ff' },
+  undead: { name: 'Костяной дракон', D: '#c8c0a8', d: '#7a7468', h: '#e8e0c8', b: '#3a3040', w: '#4a4050', wl: '#6a6070', E: '#7affa0', bones: true },
 };
 function drawDragon(P, Q, f) {
   const up = [0, 5, 10][f];
@@ -1037,13 +1061,31 @@ function buildNewTextures(scene) {
     paintTex(scene, 'fern@' + se, 15, 11, P => paintFern(P, se));
     paintTex(scene, 'shrooms@' + se, 13, 8, P => paintShrooms(P, se));
   }
+  paintTex(scene, 'sun', 22, 22, P => {
+    for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; P.line(11 + Math.cos(a) * 8, 11 + Math.sin(a) * 8, 11 + Math.cos(a) * 10.5, 11 + Math.sin(a) * 10.5, '#ffd86a'); }
+    P.ell(11, 11, 7, 7, '#ffcf4a'); P.ell(10, 10, 5, 5, '#ffe68a'); P.ell(9, 9, 2.5, 2.5, '#fff6c8');
+  });
+  glowTex(scene, 'glow_sun', '255,214,120', 0.45);
+  paintTex(scene, 'hut2', 44, 34, P => {
+    // улучшенная хижина: каменный низ, бревенчатый верх, черепица и две трубы
+    const wood = '#7a5234', woodD = '#5a3820', roof = '#9a4a32', roofD = '#7a3424', roofL = '#b85e40';
+    for (let y = 24; y < 34; y++) for (let x = 4; x < 38; x++) P.px(x, y, ((x >> 2) + (y >> 1)) % 3 === 0 ? STONE3 : (y % 3 === 0 ? STONE2 : STONE));
+    P.rect(4, 12, 34, 12, wood); for (let y = 13; y < 24; y += 2) P.rect(4, y, 34, 1, woodD);
+    P.rect(4, 12, 1, 22, '#3b2a20'); P.rect(37, 12, 1, 22, '#3b2a20');
+    for (let y = 0; y < 12; y++) { const half = Math.round((y + 1) / 12 * 20); for (let x = 21 - half; x < 21 + half; x++) P.px(x, y + 1, (x + y) % 4 === 0 ? roofD : (x < 17 ? roofL : roof)); }
+    P.rect(0, 12, 42, 1, roofD);
+    P.rect(17, 22, 7, 12, '#2a1d14'); P.rect(17, 22, 7, 1, '#3b2a20'); P.px(22, 28, '#c9a26a');
+    for (const wx of [8, 29]) { P.rect(wx, 15, 5, 5, '#f2c14e'); P.px(wx, 15, '#fff1b0'); P.rect(wx + 2, 15, 1, 5, '#3b2a20'); P.rect(wx - 1, 14, 7, 1, '#3b2a20'); }
+    P.rect(8, 0, 3, 6, STONE); P.px(8, 0, STONE2); P.rect(31, 2, 3, 5, STONE); P.px(31, 2, STONE2);
+    P.rect(38, 26, 6, 8, woodD); for (let y = 26; y < 34; y += 2) for (let x = 38; x < 44; x += 2) P.px(x, y, '#c9a26a');
+  });
   paintTex(scene, 'chest', 16, 13, P => paintChest(P, false)); paintTex(scene, 'chest_open', 16, 13, P => paintChest(P, true));
   ['A', 'B'].forEach((fr, i) => paintTex(scene, 'santa_' + fr, 56, 26, P => { P.ctx.save(); P.ctx.translate(1, 5); drawSanta(P, i); P.ctx.restore(); }));
   paintTex(scene, 'gift', 9, 9, P => { P.rect(0, 2, 9, 7, '#c02a2a'); P.rect(0, 2, 9, 1, '#e04a4a'); P.rect(4, 2, 1, 7, '#f2c14e'); P.rect(0, 5, 9, 1, '#f2c14e'); P.line(4, 2, 2, 0, '#f2c14e'); P.line(4, 2, 6, 0, '#f2c14e'); });
   paintTex(scene, 'fireball', 8, 6, P => { P.ell(4, 3, 4, 3, '#ff7a2a'); P.ell(5, 3, 2.4, 1.8, '#ffd23a'); P.px(6, 3, '#fff1b0'); });
   for (const k in RACES) {
     const p = RACES[k].pal, st = RACES[k].style;
-    const off = { house: 5, tent: 3, mound: 11 }[st];
+    const off = { house: 5, tent: 3, mound: 11 }[st] || 0;
     ['A', 'B'].forEach((fr, i) => paintTex(scene, `unq_${fr}_${k}`, 28, 29, P => { P.ctx.save(); P.ctx.translate(0, off); drawUniq(P, p, st, i); P.ctx.restore(); }));
     silhouette(scene, `unq_A_${k}`, `unq_X_${k}`, '#e03a3a');
     const Q = DRAGON_PAL[k];
@@ -1347,6 +1389,483 @@ function drawFiend(P, f, Q = FOE_PAL, tame) {
   if (tame) { P.rect(8, 13, 12, 1, tame.K); P.px(14, 14, tame.K); }
 }
 
+
+// ================== ПИКСЕЛЬ-АРТ: ГНОМЫ, ЭЛЬФЫ, НЕЖИТЬ ==================
+// Собственные модели трёх народов: у каждого свой ездовой зверь монарха, воины, маги, рабочие,
+// звери, уникальные существа, осадные машины и постройки. Подключаются поверх общих функций
+// по стилю народа (RACES[k].style = 'dwarf' | 'elf' | 'undead').
+const RSTY = {};
+const hiC = (c, t = 0.22) => mix(c, '#ffffff', t), loC = (c, t = 0.25) => mix(c, '#000000', t);
+
+// ---------------------------------------------------------------- ГНОМЫ
+const DW = {
+  // монарх на боевом баране (38×35)
+  mon(P, p, f) {
+    const W1 = '#ddd2b6', W2 = '#bcae8e', W3 = '#8f8466', hoof = '#221d18', horn = '#cdbd8c', horn2 = '#8f7f58';
+    const L = f === 0 ? [[10, 26, 10, 31], [25, 26, 25, 31], [13, 26, 13, 31], [28, 26, 28, 31]] : [[11, 26, 13, 31], [25, 26, 22, 31], [13, 26, 9, 31], [28, 26, 31, 31]];
+    L.forEach(([x0, y0, x1, y1], i) => { P.line(x0, y0, x1, y1, i < 2 ? W3 : '#a39678', 3); P.rect(x1, y1 + 1, 3, 2, hoof); });
+    P.ell(6.5, 20, 2.6, 2.6, W2); P.px(5, 19, W1);
+    P.ell(18.5, 21.5, 12.5, 6.2, sh3(W1, W2, W3, -0.4, 0.5));
+    for (let y = 17; y < 27; y += 2) for (let x = 8 + (y % 4 ? 1 : 0); x < 30; x += 3) P.px(x, y, (x + y) % 2 ? W3 : W1);
+    // голова и закрученный рог
+    P.ell(31.5, 19.5, 4.4, 4, sh3(W1, W2, W3)); P.poly([[32, 18], [37, 20.5], [37, 24], [33, 24.5]], '#a89a7a');
+    P.px(36, 22, INK); P.px(34, 23, '#6e6450'); P.px(33, 18, INK); P.px(34, 18, '#f2e2a8');
+    P.ell(30, 15.5, 3.8, 3.8, horn); P.ell(30, 15.5, 2, 2, horn2); P.px(30, 15, W2); P.px(28, 13, hiC(horn)); P.line(32, 18, 34, 21, horn2);
+    // попона с кольчужной бахромой
+    P.rect(12, 15, 12, 7, p.C); P.rect(12, 15, 12, 1, p.Y); P.rect(12, 21, 12, 1, p.c);
+    for (let x = 12; x < 24; x += 2) { P.px(x, 22, p.A); P.px(x + 1, 22, p.a); }
+    P.rect(16, 17, 3, 3, p.K); P.px(17, 18, p.c);
+    // всадник: плащ, короткая нога, широкий панцирь
+    P.poly([[14, 8], [17, 8], [16, 15], [11, 19], [7, 18], [10, 13]], p.c); P.line(11, 12, 8, 17, p.C);
+    P.rect(17, 15, 4, 4, p.c); P.rect(17, 19, 5, 2, p.B); P.px(21, 20, p.K);
+    P.rect(12, 8, 10, 7, p.A); P.rect(12, 8, 10, 1, p.Q); P.rect(12, 8, 1, 7, p.a); P.rect(21, 9, 1, 6, p.Q);
+    P.rect(12, 13, 10, 1, p.B); P.rect(16, 13, 2, 1, p.K);
+    // рука с боевым молотом
+    P.rect(21, 9, 3, 3, p.A); P.rect(23, 10, 2, 2, p.S);
+    P.rect(25, 3, 1, 12, p.D); P.rect(23, 0, 6, 4, p.Q); P.rect(23, 3, 6, 1, p.a); P.px(24, 1, p.K); P.px(27, 1, p.K); P.px(23, 0, '#ffffff');
+    // голова: шлем-корона, нос, огромная борода с косами
+    P.rect(15, 3, 6, 4, p.S); P.px(21, 5, p.s); P.px(19, 4, p.E); P.px(17, 4, p.E);
+    P.rect(14, 1, 8, 3, p.A); P.rect(14, 1, 8, 1, p.Q); P.rect(14, 0, 8, 1, p.K); P.px(14, 0, '#fff1b0'); P.px(16, 1, '#d0463a'); P.px(19, 1, '#3a8ad0');
+    P.rect(17, 3, 1, 3, p.a);
+    P.rect(14, 6, 8, 4, p.H); P.rect(15, 10, 6, 2, p.H); P.rect(16, 12, 4, 1, p.H);
+    P.px(15, 7, hiC(p.H)); P.px(18, 8, hiC(p.H)); P.px(20, 7, loC(p.H)); P.rect(17, 7, 3, 1, loC(p.H, 0.4));
+    P.px(16, 13, p.H); P.px(19, 13, p.H); P.px(16, 14, p.K); P.px(19, 14, p.K);
+  },
+  // хирдманн: шлем с наносником, круглый щит, секира (20×25)
+  mel(P, p, f) {
+    legs(P, 7, 11, 21, 3, f, p.a, loC(p.a), p.B, 3);
+    P.rect(5, 13, 10, 8, p.A); P.rect(5, 13, 10, 1, p.Q); P.rect(5, 13, 1, 8, p.a);
+    for (let y = 15; y < 21; y += 2) for (let x = 6 + (y % 4 ? 1 : 0); x < 15; x += 2) P.px(x, y, p.a);
+    P.rect(7, 15, 6, 6, p.C); P.rect(7, 15, 1, 6, p.c); P.rect(9, 16, 2, 3, p.K);
+    P.rect(5, 19, 10, 1, p.B); P.rect(9, 19, 2, 1, p.K);
+    // секира
+    P.rect(14, 14, 2, 2, p.S); P.rect(16, 4, 1, 18, p.D); P.px(16, 12, p.l);
+    P.poly([[17, 3], [20, 2], [20, 10], [17, 9]], p.W); P.rect(17, 3, 1, 7, p.Q); P.px(19, 3, '#ffffff'); P.px(19, 9, p.a);
+    // голова и шлем
+    P.rect(7, 7, 6, 4, p.S); P.px(11, 8, p.E); P.px(13, 9, p.s);
+    P.rect(6, 4, 8, 4, p.A); P.rect(7, 3, 6, 1, p.A); P.rect(7, 4, 3, 1, p.Q); P.rect(6, 7, 8, 1, p.a); P.rect(10, 7, 1, 3, p.a);
+    P.px(5, 4, p.W); P.px(4, 3, p.W); P.px(14, 4, p.W); P.px(15, 3, p.W); P.rect(9, 2, 2, 1, p.K);
+    // борода с бусинами
+    P.rect(6, 10, 8, 3, p.H); P.rect(7, 13, 6, 2, p.H); P.rect(8, 15, 4, 1, p.H); P.px(8, 11, hiC(p.H)); P.px(12, 12, loC(p.H));
+    P.px(8, 16, p.H); P.px(11, 16, p.H); P.px(8, 17, p.K); P.px(11, 17, p.K);
+    // круглый щит
+    P.ell(4, 16, 4.2, 4.6, p.A); P.ell(4, 16, 3.3, 3.7, p.C); P.line(1, 16, 7, 16, p.Y); P.line(4, 12, 4, 20, p.Y); P.ell(4, 16, 1.2, 1.2, p.K); P.px(2, 13, hiC(p.C));
+  },
+  // арбалетчик в кожаном капюшоне (20×25)
+  rng(P, p, f) {
+    legs(P, 7, 11, 21, 3, f, p.c, loC(p.c), p.B, 3);
+    P.rect(3, 12, 3, 8, p.D); P.px(3, 11, p.W); P.px(5, 11, p.W); P.px(4, 10, p.Q);
+    P.rect(5, 13, 10, 8, p.L); P.rect(5, 13, 1, 8, p.l); P.rect(6, 13, 8, 2, p.C); P.rect(5, 19, 10, 1, p.B); P.px(10, 19, p.K);
+    // голова: кожаная шапка, борода
+    P.rect(7, 7, 6, 4, p.S); P.px(11, 8, p.E); P.px(13, 9, p.s);
+    P.rect(6, 4, 8, 4, p.c); P.rect(7, 3, 6, 1, p.c); P.rect(6, 6, 8, 1, p.C); P.px(7, 4, p.C);
+    P.rect(6, 10, 8, 3, p.H); P.rect(7, 13, 6, 1, p.H); P.rect(8, 14, 4, 1, p.H); P.px(8, 11, hiC(p.H)); P.px(10, 15, p.K);
+    // арбалет наизготовку
+    P.rect(12, 13, 3, 2, p.S);
+    P.rect(10, 13, 9, 2, p.D); P.rect(10, 13, 9, 1, p.l); P.rect(17, 9, 1, 9, p.A); P.px(17, 9, p.Q); P.px(16, 9, p.a); P.px(16, 17, p.a);
+    P.line(17, 10, 13, 13, '#c9b48a'); P.line(17, 16, 13, 14, '#c9b48a'); P.rect(18, 13, 2, 1, p.W);
+  },
+  // рунный мастер: лысый, белая борода до пояса, посох-молот с руной (20×28)
+  mag(P, p, f) {
+    const cast = f === 2, hem = f === 1 ? 1 : 0;
+    P.poly([[5, 13], [15, 13], [16, 27], [4 - hem, 27]], p.C);
+    P.rect(5, 13, 1, 14, p.c); P.rect(4 - hem, 26, 12 + hem, 1, p.c);
+    P.rect(5, 19, 10, 1, p.K); for (const [x, y] of [[7, 22], [11, 23], [9, 25], [13, 21]]) { P.px(x, y, p.G); P.px(x + 1, y, p.K); }
+    P.rect(5, 27, 4, 1, p.B); P.rect(11, 27, 4, 1, p.B);
+    P.rect(7, 7, 6, 5, p.S); P.rect(7, 6, 6, 1, p.s); P.px(11, 9, p.E); P.px(13, 10, p.s); P.px(8, 7, hiC(p.S, 0.4));
+    P.rect(6, 8, 1, 3, BONE); P.rect(13, 8, 1, 2, BONE);
+    P.rect(6, 11, 8, 4, BONE); P.rect(7, 15, 6, 3, BONE); P.rect(8, 18, 4, 1, BONE); P.px(9, 19, BONE); P.px(10, 13, '#c8bda6'); P.px(8, 16, '#c8bda6');
+    P.rect(8, 10, 4, 1, p.s);
+    const top = cast ? 0 : 4;
+    P.rect(16, top + 4, 1, 28 - top - 4, p.D);
+    P.rect(14, top, 5, 4, STONE2); P.rect(14, top + 3, 5, 1, STONE3); P.px(16, top + 1, p.G); P.px(16, top + 2, p.G); P.px(15, top + 1, p.G);
+    if (cast) { P.px(13, top + 1, p.G); P.px(19, top + 2, p.G); P.px(16, Math.max(0, top - 1), '#ffffff'); P.px(12, top + 4, p.G); }
+    P.rect(14, cast ? 10 : 15, 3, 1, p.S);
+  },
+  // каменщик: шахтёрская каска с фонарём, кирка (20×25)
+  bld(P, p, fr) {
+    const shirt = '#8a6a4a', apron = '#5a4632', trou = '#4a4038';
+    legs(P, 7, 11, 21, 3, fr === 'walk1' ? 1 : 0, trou, loC(trou), p.B, 3);
+    P.rect(5, 13, 10, 8, shirt); P.rect(5, 13, 1, 8, loC(shirt)); P.rect(8, 15, 6, 6, apron); P.rect(8, 15, 6, 1, hiC(apron)); P.rect(5, 17, 10, 1, p.B);
+    P.rect(7, 7, 6, 4, p.S); P.px(11, 8, p.E); P.px(13, 9, p.s);
+    P.rect(6, 4, 8, 4, '#d8a838'); P.rect(6, 7, 9, 1, '#a07a20'); P.rect(7, 3, 6, 1, '#d8a838'); P.px(7, 4, '#f2d070');
+    P.rect(12, 4, 3, 2, '#fff1b0'); P.px(14, 4, '#ffffff');
+    P.rect(6, 10, 8, 3, p.H); P.rect(7, 13, 6, 1, p.H); P.px(8, 11, hiC(p.H)); P.px(10, 14, p.H);
+    if (fr === 'walk0' || fr === 'walk1') { P.rect(3, 13, 2, 6, shirt); P.rect(2, 11, 5, 3, STONE); P.px(2, 11, STONE2); P.px(5, 13, STONE3); }
+    else if (fr === 'work0') { P.rect(14, 9, 2, 4, shirt); P.rect(15, 2, 1, 8, p.D); P.line(12, 2, 18, 1, STONE2); P.px(12, 3, STONE3); P.px(18, 2, STONE3); }
+    else if (fr === 'work1') { P.rect(14, 14, 3, 2, shirt); P.rect(17, 14, 3, 1, p.D); P.line(18, 10, 19, 19, STONE2); }
+    else if (fr === 'fish') { P.rect(14, 13, 3, 1, shirt); P.line(16, 12, 19, 0, p.D); }
+  },
+  vil(P, f, v, p) {
+    const C = ['#7a5a3a', '#5a6a6a', '#7a4a3a', '#6a6a4a'][v], hood = ['#4a5a5a', '#6a4a30', '#3a4a4a', '#5a3a2a'][v];
+    legs(P, 3, 6, 14, 2, f, '#3a3028', '#2a2018', '#1a1410', 1);
+    P.rect(1, 7, 8, 7, C); P.rect(1, 7, 1, 7, loC(C)); P.rect(1, 11, 8, 1, '#4a3020');
+    P.rect(3, 3, 4, 3, p.S); P.px(6, 4, INK); P.rect(2, 1, 6, 2, hood); P.px(2, 3, hood);
+    if (v === 1) { P.rect(2, 6, 6, 1, hood); P.px(8, 8, '#cdd3d9'); P.rect(8, 9, 1, 4, '#5a3820'); }
+    else { P.rect(2, 5, 6, 3, p.H); P.rect(3, 8, 4, 1, p.H); P.px(4, 9, p.H); }
+    if (v === 3) { P.rect(8, 9, 2, 3, '#8f6a3c'); P.px(8, 8, p.K); }
+  },
+  tax(P, f, p) {
+    legs(P, 3, 7, 14, 2, f, '#3a3028', '#2a2018', '#1a1410', 1);
+    P.rect(1, 7, 9, 7, p.C); P.rect(1, 7, 1, 7, p.c); P.rect(1, 11, 9, 1, p.K);
+    P.rect(3, 3, 5, 3, p.S); P.px(7, 4, INK); P.rect(2, 1, 7, 2, '#2a1d14'); P.rect(1, 2, 9, 1, '#2a1d14'); P.px(5, 0, p.K);
+    P.rect(2, 5, 7, 3, p.H); P.rect(3, 8, 5, 1, p.H); P.px(5, 9, p.H);
+    P.ell(10, 11, 2, 2.3, '#8f6a3c'); P.px(10, 9, p.K); P.px(9, 11, '#f2c14e');
+  },
+  // боевой медведь в броне (27×24)
+  bst(P, p, f) {
+    const B1 = '#7a5236', B2 = '#5c3c26', B3 = '#946848', claw = BONE;
+    const lx = f === 0 ? [[5, B2], [9, B1], [17, B2], [21, B1]] : [[4, B2], [10, B1], [16, B2], [22, B1]];
+    for (const [x, c] of lx) { P.rect(x, 17, 3, 6, c); P.rect(x, 23, 4, 1, loC(c)); P.px(x + 3, 23, claw); }
+    P.ell(13, 14, 10.5, 6.5, sh3(B3, B1, B2, -0.5, 0.5)); P.ell(5, 13, 3, 4, B1);
+    P.ell(22, 11, 4.5, 4.2, sh3(B3, B1, B2)); P.rect(24, 11, 3, 3, B3); P.px(26, 11, INK); P.px(22, 9, INK); P.px(21, 7, B2); P.px(19, 7, B2); P.px(20, 8, B3);
+    P.rect(24, 13, 2, 1, BONE);
+    // броня: налобник и чепрак
+    P.rect(20, 8, 4, 2, p.A); P.px(22, 7, p.K); P.rect(8, 8, 11, 6, p.A); P.rect(8, 8, 11, 1, p.Q); P.rect(9, 10, 9, 3, p.C); P.rect(12, 11, 3, 1, p.K);
+    for (let x = 8; x < 19; x += 2) P.px(x, 14, p.a);
+    P.rect(11, 5, 5, 3, p.c); P.rect(11, 5, 5, 1, p.Y);
+  },
+  // железный голем с рунами (28×29)
+  unq(P, p, f) {
+    const I = '#6c747c', i2 = '#4e555c', i3 = '#8f98a0', glow = p.G;
+    const lx = f === 0 ? [7, 15] : [6, 16];
+    P.rect(lx[0], 21, 5, 7, i2); P.rect(lx[1], 21, 5, 7, I); P.rect(lx[0] - 1, 27, 7, 2, i2); P.rect(lx[1], 27, 7, 2, i2);
+    P.rect(4, 8, 20, 14, I); P.rect(4, 8, 20, 1, i3); P.rect(4, 8, 1, 14, i3); P.rect(23, 8, 1, 14, i2);
+    for (const [x, y] of [[6, 10], [21, 10], [6, 19], [21, 19], [13, 20]]) P.px(x, y, i3);
+    P.rect(11, 12, 6, 5, i2); P.rect(12, 13, 4, 3, glow); P.px(13, 13, '#ffffff'); P.line(8, 14, 10, 14, glow); P.line(18, 14, 20, 14, glow);
+    P.rect(9, 1, 10, 7, I); P.rect(9, 1, 10, 1, i3); P.rect(10, 4, 3, 1, glow); P.rect(15, 4, 3, 1, glow); P.rect(11, 6, 6, 1, i2);
+    P.rect(13, 0, 2, 1, p.K);
+    // кулаки-молоты
+    P.rect(0, 9, 4, 10, i2); P.rect(-1, 18, 6, 5, I); P.rect(-1, 18, 6, 1, i3);
+    P.rect(24, 9, 4, 10, i2); P.rect(23, 18, 6, 5, I); P.rect(23, 18, 6, 1, i3);
+    P.rect(8, 21, 12, 1, p.C); P.rect(12, 21, 4, 2, p.K);
+  },
+  // пушка на лафете (30×22), кадр 1 — выстрел
+  cat(P, p, f) {
+    const w = '#6a4a30', wd = '#4a3020', wl = '#8a6440', br = '#b8803a', brd = '#7a5222', brl = '#e0a860';
+    P.rect(4, 14, 18, 3, w); P.rect(4, 14, 18, 1, wl); P.line(4, 16, 1, 19, wd, 2);
+    for (const cx of [9, 19]) { P.ell(cx, 18, 4, 4, wd); P.ell(cx, 18, 2.6, 2.6, w); P.px(cx, 18, STONE3); for (let a = 0; a < 6; a++) P.px(cx + Math.round(Math.cos(a) * 3), 18 + Math.round(Math.sin(a) * 3), wd); }
+    const kick = f ? 1 : 0;
+    P.poly([[7 - kick, 9], [25 - kick, 7], [25 - kick, 12], [7 - kick, 13]], br);
+    P.rect(7 - kick, 9, 18, 1, brl); P.rect(7 - kick, 12, 18, 1, brd);
+    P.rect(24 - kick, 6, 3, 7, brd); P.rect(25 - kick, 7, 1, 5, '#2a1a10');
+    P.rect(12 - kick, 8, 2, 5, brd); P.rect(19 - kick, 7, 2, 6, brd); P.ell(6 - kick, 11, 2, 2, brd);
+    P.px(15 - kick, 9, p.K);
+    P.rect(1, 9, 1, 6, wd); P.rect(1, 8, 3, 2, p.C);
+    if (f) { P.ell(28, 9, 2.5, 2.5, '#f2c14e'); P.ell(28, 9, 1.2, 1.2, '#fff1b0'); P.ell(27, 5, 2.5, 2, '#bcb4a8'); P.ell(29, 4, 1.5, 1.5, '#d8d0c4'); }
+    for (let i = 0; i < 3; i++) P.ell(24 + i * 2.5, 20, 1.3, 1.3, STONE3);
+  },
+};
+
+// ---------------------------------------------------------------- ЭЛЬФЫ
+const EL = {
+  // монарх на белом олене (38×35)
+  mon(P, p, f) {
+    const D1 = '#ece6da', D2 = '#c8bfae', D3 = '#9c9282', hoof = '#4a4038', ant = '#c8a870', ant2 = '#9a7a48';
+    const L = f === 0 ? [[11, 24, 11, 31], [25, 24, 25, 31], [14, 24, 14, 31], [28, 24, 28, 31]] : [[12, 24, 15, 31], [25, 24, 21, 31], [14, 24, 9, 30], [28, 24, 32, 30]];
+    L.forEach(([x0, y0, x1, y1], i) => { P.line(x0, y0, x1, y1, i < 2 ? D3 : D2, 2); P.rect(x1, y1 + 2, 2, 1, hoof); P.px(x1, y1 + 1, loC(i < 2 ? D3 : D2)); });
+    P.rect(7, 16, 3, 3, BONE); P.px(7, 16, '#ffffff');
+    P.ell(19, 19.5, 11, 5, sh3('#ffffff', D1, D2, -0.45, 0.5)); P.ell(11, 19, 4.4, 4.6, sh3('#ffffff', D1, D2)); P.ell(26, 18.5, 4, 5.2, sh3('#ffffff', D1, D2));
+    for (const [x, y] of [[15, 17], [19, 16], [23, 17], [17, 19]]) P.px(x, y, D2);
+    P.poly([[24, 18], [27, 11], [29, 6], [32, 5], [33, 10], [31, 18]], D1); P.line(30, 10, 29, 17, D2);
+    P.poly([[29, 6], [32, 3.5], [35, 5], [37.5, 9], [37, 11], [34, 11], [31, 9]], D1); P.px(36, 10, INK); P.px(33, 6, INK); P.px(34, 6, '#8ac0ff');
+    P.px(31, 4, D2); P.px(30, 3, D1);
+    // ветвистые рога
+    P.line(32, 4, 30, 0, ant, 1); P.line(31, 2, 28, 1, ant); P.line(33, 4, 35, 0, ant); P.line(34, 2, 37, 1, ant); P.px(29, 0, ant2); P.px(36, 0, ant2); P.px(27, 1, ant2);
+    // лиственная попона
+    P.rect(13, 14, 12, 6, p.C); P.rect(13, 14, 12, 1, p.Y);
+    for (let x = 13; x < 25; x += 3) { P.px(x, 20, p.C); P.px(x + 1, 21, p.Y); }
+    P.px(18, 16, p.K); P.px(19, 17, p.K); P.px(17, 17, p.K);
+    // всадник: летящий плащ, стройная фигура, длинные волосы
+    P.poly([[14, 7], [17, 7], [17, 14], [9, 18], [5, 15], [10, 11]], p.c); P.line(10, 12, 6, 15, p.C); P.line(13, 12, 9, 17, p.C);
+    P.rect(17, 13, 3, 6, p.c); P.rect(17, 19, 4, 2, p.B);
+    P.rect(15, 7, 5, 7, p.C); P.rect(15, 7, 1, 7, p.c); P.rect(19, 8, 1, 6, p.Y); P.rect(15, 12, 5, 1, p.K);
+    P.line(14, 7, 20, 13, '#8a6a3a'); P.line(13, 8, 13, 16, '#8a6a3a'); P.px(13, 7, '#c8a870'); P.px(13, 17, '#c8a870');
+    P.rect(20, 8, 3, 2, p.C); P.rect(23, 9, 2, 2, p.S); P.line(25, 10, 32, 8, '#8a6a3a');
+    P.rect(16, 1, 4, 6, p.S); P.rect(16, 6, 4, 1, p.s); P.px(19, 3, p.E); P.px(20, 4, p.S); P.px(20, 5, p.s);
+    P.px(15, 2, p.S); P.px(14, 1, p.S); P.px(13, 0, p.S);
+    P.rect(15, 0, 5, 2, p.H); P.rect(14, 2, 2, 7, p.H); P.rect(13, 5, 1, 6, p.H); P.px(12, 9, p.H); P.px(14, 3, hiC(p.H));
+    P.rect(16, 0, 4, 1, p.K); P.px(18, 0, '#7affd0');
+  },
+  // страж рощи: стройный, плащ-лист, два изогнутых клинка (20×25)
+  mel(P, p, f) {
+    legs(P, 8, 11, 17, 7, f, p.c, loC(p.c), p.B, 2);
+    P.poly([[7, 8], [12, 8], [10, 20], [3, 21]], p.c); P.line(6, 12, 4, 20, p.C);
+    P.rect(8, 8, 5, 10, p.C); P.rect(8, 8, 1, 10, p.c); P.rect(12, 9, 1, 8, p.Y);
+    for (let y = 10; y < 17; y += 3) { P.px(10, y, p.Y); P.px(11, y + 1, p.Y); }
+    P.rect(8, 14, 5, 1, p.B); P.px(10, 14, p.K);
+    // клинки
+    P.rect(13, 10, 2, 2, p.S); P.line(15, 10, 19, 4, p.W); P.line(15, 9, 18, 4, p.Q); P.px(19, 3, '#ffffff'); P.rect(14, 11, 2, 1, p.K);
+    P.rect(6, 13, 2, 2, p.S); P.line(6, 15, 2, 22, p.W); P.px(1, 23, '#ffffff'); P.rect(5, 14, 2, 1, p.K);
+    // голова
+    P.rect(9, 2, 4, 6, p.S); P.rect(9, 7, 4, 1, p.s); P.px(12, 4, p.E); P.px(13, 5, p.S);
+    P.px(8, 3, p.S); P.px(7, 2, p.S); P.px(6, 1, p.S);
+    P.rect(8, 0, 5, 2, p.H); P.rect(7, 2, 2, 5, p.H); P.rect(6, 4, 1, 6, p.H); P.px(5, 9, p.H); P.px(8, 1, hiC(p.H));
+    P.rect(9, 1, 4, 1, p.K);
+  },
+  // лучник с длинным луком (20×25)
+  rng(P, p, f) {
+    legs(P, 8, 11, 17, 7, f, p.c, loC(p.c), p.B, 2);
+    P.rect(4, 8, 3, 9, '#6a4a2a'); P.px(4, 7, '#f4f0e0'); P.px(6, 6, p.Y); P.px(5, 7, p.Y);
+    P.rect(7, 8, 6, 10, p.C); P.rect(7, 8, 1, 10, p.c); P.rect(7, 14, 6, 1, p.B);
+    P.poly([[7, 4], [13, 3], [13, 8], [7, 10]], p.c); P.rect(9, 4, 4, 5, p.S); P.px(12, 5, p.E); P.px(13, 6, p.S);
+    P.px(8, 4, p.c); P.px(9, 3, p.c); P.rect(8, 2, 5, 2, p.c); P.px(6, 6, p.c); P.px(5, 8, p.c);
+    P.px(9, 8, p.s);
+    for (const [x, y] of [[15, 0], [16, 1], [17, 2], [17, 3], [18, 4], [18, 5], [18, 6], [18, 7], [18, 8], [18, 9], [18, 10], [18, 11], [18, 12], [18, 13], [18, 14], [18, 15], [18, 16], [17, 17], [17, 18], [16, 19], [15, 20]]) P.px(x, y, '#8a6a3a');
+    P.px(15, 0, p.Y); P.px(15, 20, p.Y); P.rect(15, 1, 1, 19, '#e8e0c8');
+    P.rect(12, 10, 6, 1, p.C); P.rect(18, 9, 1, 3, p.S); P.rect(13, 10, 7, 1, '#c8b48a'); P.px(19, 10, p.W);
+  },
+  // друид: венец из рогов, посох-ветвь с листьями (20×28)
+  mag(P, p, f) {
+    const cast = f === 2, hem = f === 1 ? 1 : 0;
+    P.poly([[6, 9], [13, 9], [16, 27], [3 - hem, 27]], '#6a5232');
+    P.poly([[7, 9], [12, 9], [13, 27], [6, 27]], p.C); P.rect(6, 9, 1, 18, '#4a3a22');
+    for (let x = 3 - hem; x < 16; x += 2) P.px(x, 27, p.Y);
+    for (let y = 12; y < 26; y += 4) { P.px(9, y, p.Y); P.px(10, y + 1, p.Y); }
+    P.rect(7, 15, 6, 1, p.B);
+    P.rect(8, 3, 4, 6, p.S); P.px(11, 5, p.E); P.px(12, 6, p.S); P.rect(8, 8, 4, 1, p.s);
+    P.px(7, 4, p.S); P.px(6, 3, p.S);
+    P.rect(7, 2, 5, 2, p.H); P.rect(6, 4, 2, 7, p.H); P.px(5, 10, p.H);
+    P.line(8, 2, 6, 0, '#c8a870'); P.line(11, 2, 13, 0, '#c8a870'); P.px(5, 0, '#c8a870'); P.px(14, 1, '#c8a870');
+    const top = cast ? 0 : 4;
+    P.line(16, top + 3, 16, 27, '#6a4a2a'); P.px(15, top + 2, '#6a4a2a'); P.px(17, top + 2, '#6a4a2a');
+    P.px(14, top + 1, '#4a8a3a'); P.px(18, top + 1, '#4a8a3a'); P.px(14, top + 4, '#6ab85a'); P.px(18, top + 5, '#6ab85a');
+    P.rect(15, top, 3, 3, p.G); P.px(16, top + 1, '#ffffff');
+    if (cast) { P.px(13, top + 2, p.G); P.px(19, top, p.G); P.px(16, Math.max(0, top - 1), p.G); P.px(12, top + 6, '#6ab85a'); P.px(19, top + 6, '#6ab85a'); }
+    P.rect(13, cast ? 9 : 13, 3, 1, p.S);
+  },
+  // садовник: листовая шапочка, корзина и садовые ножницы (20×25)
+  bld(P, p, fr) {
+    const tun = '#7a9a4a', tunD = '#5a7a34', trou = '#6a5a3a';
+    legs(P, 8, 11, 17, 7, fr === 'walk1' ? 1 : 0, trou, loC(trou), p.B, 2);
+    P.rect(7, 9, 6, 9, tun); P.rect(7, 9, 1, 9, tunD); P.rect(7, 13, 6, 1, p.B); P.px(11, 13, p.K);
+    P.rect(9, 3, 4, 6, p.S); P.px(12, 5, p.E); P.px(13, 6, p.S); P.rect(9, 8, 4, 1, p.s);
+    P.px(8, 4, p.S); P.px(7, 3, p.S);
+    P.rect(8, 2, 5, 2, '#5a8a3a'); P.px(13, 1, '#5a8a3a'); P.px(14, 0, '#7ab85a'); P.rect(7, 4, 2, 4, p.H); P.px(9, 1, '#7ab85a');
+    if (fr === 'walk0' || fr === 'walk1') { P.rect(5, 10, 2, 5, tun); P.rect(2, 13, 6, 4, '#a0783a'); P.rect(2, 13, 6, 1, '#c8a050'); P.px(3, 12, STONE2); P.px(5, 12, STONE); }
+    else if (fr === 'work0') { P.rect(13, 6, 2, 4, tun); P.line(14, 5, 17, 0, '#cdd3d9'); P.line(15, 5, 18, 2, '#cdd3d9'); P.rect(13, 5, 2, 2, '#6a4a2a'); }
+    else if (fr === 'work1') { P.rect(13, 11, 3, 1, tun); P.line(16, 11, 19, 16, '#cdd3d9'); P.line(16, 12, 18, 17, '#cdd3d9'); }
+    else if (fr === 'fish') { P.rect(13, 10, 3, 1, tun); P.line(16, 9, 19, 0, '#8a6a3a'); }
+  },
+  vil(P, f, v, p) {
+    const C = ['#5a8a4a', '#8a7a4a', '#4a7a6a', '#7a6a8a'][v], hair = ['#e8d080', '#c8a060', '#f0e0b0', '#8a5a3a'][v];
+    legs(P, 3, 6, 12, 4, f, '#4a3e33', '#3a3028', '#2a1d14', 1);
+    P.rect(2, 6, 6, 7, C); P.rect(2, 6, 1, 7, loC(C)); P.rect(2, 9, 6, 1, '#5a4028');
+    P.rect(3, 1, 4, 5, p.S); P.px(6, 3, INK); P.px(2, 2, p.S); P.px(1, 1, p.S);
+    P.rect(2, 0, 5, 2, hair); P.rect(2, 2, 1, 6, hair); P.px(1, 7, hair);
+    if (v === 2) P.rect(2, 0, 5, 1, '#e8e0a0');
+    if (v === 3) { P.rect(8, 7, 2, 3, '#a0783a'); P.px(8, 6, '#c03a4a'); }
+  },
+  tax(P, f, p) {
+    legs(P, 3, 7, 12, 4, f, '#3a3028', '#2a2018', '#1a1410', 1);
+    P.rect(2, 6, 7, 7, p.C); P.rect(2, 6, 1, 7, p.c); P.rect(2, 9, 7, 1, p.K);
+    P.rect(3, 1, 4, 5, p.S); P.px(6, 3, INK); P.px(2, 2, p.S); P.px(1, 1, p.S);
+    P.rect(2, 0, 5, 2, p.H); P.rect(2, 2, 1, 5, p.H); P.rect(3, 0, 4, 1, p.K);
+    P.rect(8, 7, 3, 5, '#e8dcc0'); P.px(9, 8, INK); P.px(9, 10, INK); P.px(8, 6, '#c8a050');
+  },
+  // энт: ходячее дерево (27×24)
+  bst(P, p, f) {
+    const B1 = '#6a4a2a', B2 = '#4a3218', B3 = '#8a6a3a', L1 = '#4f8a3a', L2 = '#3a6a2a', L3 = '#7ab85a';
+    const lx = f === 0 ? [[7, 0], [15, 0]] : [[6, -1], [16, 1]];
+    for (const [x, o] of lx) { P.rect(x, 17, 4, 5, B2); P.line(x, 22, x - 2 + o, 23, B2); P.line(x + 3, 22, x + 5 + o, 23, B2); P.px(x + 1, 23, B2); }
+    P.rect(7, 7, 12, 11, B1); P.rect(7, 7, 2, 11, B3); P.rect(17, 7, 2, 11, B2);
+    for (let y = 8; y < 17; y += 2) P.px(11 + (y % 4 ? 1 : 0), y, B2);
+    P.px(10, 10, p.G); P.px(14, 10, p.G); P.rect(11, 13, 3, 1, B2);
+    P.line(7, 9, 2, 14, B1, 2); P.line(2, 14, 1, 18, B2); P.px(0, 18, B2); P.px(3, 18, B2);
+    P.line(18, 9, 23, 5, B1, 2); P.line(23, 5, 26, 6, B2); P.px(24, 3, B2);
+    P.ell(13, 4, 10, 4.5, sh3(L3, L1, L2)); P.ell(3, 7, 3.5, 3, L1); P.ell(24, 3, 3, 2.6, L1);
+    for (const [x, y] of [[6, 2], [11, 1], [17, 3], [20, 5], [8, 6], [14, 6]]) P.px(x, y, L3);
+    P.px(16, 2, '#e8a0c0'); P.px(9, 3, '#e8a0c0');
+    P.rect(9, 15, 8, 1, p.C); P.px(13, 15, p.K);
+  },
+  // пегас (28×29)
+  unq(P, p, f) {
+    const N = '#f4f2ee', n = '#cfcac0', m = '#ffffff', mane = '#a0d8ff', hoof = '#8a8478', wing = '#e8f0ff', wl = '#b8c8e8';
+    const L = f === 0 ? [[7, 20, 7, 25, n], [19, 20, 19, 25, n], [10, 20, 10, 25, N], [22, 20, 22, 25, N]] : [[8, 20, 10, 25, n], [19, 20, 16, 25, n], [10, 20, 6, 24, N], [22, 20, 25, 24, N]];
+    for (const [x0, y0, x1, y1, c] of L) { P.line(x0, y0, x1, y1, c, 2); P.rect(x1, y1 + 2, 2, 1, hoof); }
+    P.line(6, 15, 3, 18, mane, 2); P.line(3, 18, 2, 23, mane, 2);
+    const up = f ? 0 : 1;
+    if (up) P.poly([[10, 15], [6, 2], [12, 0], [18, 6], [17, 14]], wl); else P.poly([[10, 15], [3, 9], [8, 5], [18, 9], [17, 15]], wl);
+    P.ell(14.5, 17.5, 9, 4, sh3(m, N, n)); P.ell(8.5, 17, 4, 4, sh3(m, N, n)); P.ell(20.5, 16.5, 3.6, 4.4, sh3(m, N, n));
+    P.poly([[18, 17], [20, 11], [22, 8], [25, 7], [26, 11], [24, 17]], N);
+    P.poly([[22, 7], [25, 5], [27, 6], [28, 10], [28, 12], [25, 12], [23, 10]], N); P.px(25, 8, INK); P.rect(26, 11, 2, 1, n);
+    P.line(19, 15, 22, 7, mane, 2); P.px(24, 5, mane);
+    P.rect(11, 14, 6, 3, p.C); P.rect(11, 14, 6, 1, p.Y); P.px(13, 15, p.K);
+    if (up) { P.poly([[12, 15], [9, 1], [15, -1], [21, 5], [19, 14]], wing); for (let i = 0; i < 4; i++) P.line(13 + i * 2, 14, 10 + i * 3, 1 + (i === 3 ? 2 : 0), wl); }
+    else { P.poly([[12, 15], [4, 11], [9, 7], [21, 10], [19, 16]], wing); for (let i = 0; i < 4; i++) P.line(13 + i * 2, 15, 6 + i * 4, 9 + (i % 2), wl); }
+  },
+  // скорпион: лёгкая баллиста с резьбой (30×22)
+  cat(P, p, f) {
+    const w = '#a07848', wd = '#6a4a2a', wl = '#c8a070', leaf = '#5a8a3a';
+    P.rect(3, 15, 22, 2, w); P.rect(3, 15, 22, 1, wl); P.rect(3, 16, 22, 1, wd);
+    for (const cx of [7, 21]) { P.ell(cx, 18.5, 3.5, 3.5, wd); P.ell(cx, 18.5, 2, 2, w); P.px(cx, 18, leaf); }
+    P.line(12, 15, 14, 9, wd, 2); P.line(17, 15, 15, 9, wd, 2);
+    P.rect(6, 8, 20, 2, w); P.rect(6, 8, 20, 1, wl); P.px(8, 8, leaf); P.px(13, 8, leaf);
+    const bend = f ? 2 : 0;
+    P.line(22, 9, 26 - bend, 2, wd, 2); P.line(22, 9, 26 - bend, 15, wd, 2);
+    P.line(26 - bend, 2, f ? 22 : 8, 9, '#e8e0c8'); P.line(26 - bend, 15, f ? 22 : 8, 9, '#e8e0c8');
+    if (!f) { P.rect(8, 8, 18, 1, '#cdd3d9'); P.px(27, 8, '#ffffff'); }
+    P.px(26 - bend, 1, leaf); P.px(26 - bend, 16, leaf);
+    P.rect(1, 6, 1, 10, wd); P.rect(2, 6, 3, 2, p.C); P.px(2, 8, p.C);
+  },
+};
+
+// ---------------------------------------------------------------- НЕЖИТЬ
+const BONE2 = '#bdb49c', BONE3 = '#8a826e';
+const UD = {
+  // король-лич на коне-скелете (38×35)
+  mon(P, p, f) {
+    const N = '#2e2a34', n = '#1e1a22', bone = '#d8d0b8', bone2 = '#a8a08a', fire = p.G;
+    P.line(9, 18, 6, 20, fire, 2); P.line(6, 20, 3, 26, fire, 2); P.px(2, 28, fire); P.px(4, 23, '#d0ffe0');
+    const L = f === 0 ? [[9, 25, 9, 31], [24, 25, 24, 31], [12, 25, 12, 31], [27, 25, 27, 31]] : [[10, 25, 13, 31], [24, 25, 20, 31], [12, 25, 7, 30], [27, 25, 31, 30]];
+    for (const [x0, y0, x1, y1] of L) { P.line(x0, y0, x1, y1, bone2, 1); P.line(x0 + 1, y0, x1 + 1, y1, bone, 1); P.rect(x1, y1 + 2, 3, 1, n); P.px(x1, y1 + 1, bone2); }
+    P.ell(18.5, 20.5, 12, 5.4, sh3('#3e3a44', N, n, -0.45, 0.5)); P.ell(10.5, 20, 5.6, 5.6, N); P.ell(26, 19.5, 4.8, 5.8, N);
+    for (let x = 14; x < 25; x += 2) P.line(x, 17, x - 1, 24, bone2);
+    P.line(12, 17, 26, 17, bone); P.ell(9, 20, 2.5, 2.5, bone2); P.px(9, 20, n);
+    P.poly([[23, 20], [25.5, 12], [28, 7], [32, 6], [32.5, 11], [31, 20]], N);
+    for (let y = 9; y < 19; y += 2) P.px(29 - Math.round((y - 9) * 0.2), y, bone2);
+    P.poly([[28.5, 6], [31.5, 3], [34, 4.5], [37.5, 10], [37.5, 13], [34, 13.5], [30, 11]], bone);
+    P.rect(34, 10, 4, 4, bone2); P.px(35, 12, INK); P.px(37, 12, INK); P.rect(32, 6, 2, 2, INK); P.px(32, 6, fire);
+    P.line(24, 18, 28, 7, fire, 2); P.line(28, 6, 30, 3, fire); P.px(26, 9, '#d0ffe0'); P.px(23, 15, fire); P.px(27, 4, fire);
+    P.rect(11, 16, 13, 6, p.C); P.rect(11, 16, 13, 1, p.Y);
+    for (let x = 11; x < 24; x += 2) P.px(x, 22 + (x % 4 ? 1 : 0), p.c);
+    P.rect(16, 18, 3, 3, bone); P.px(16, 19, INK); P.px(18, 19, INK);
+    // лич: рваный плащ, тёмные латы, череп в короне с шипами
+    P.poly([[13, 8], [16, 8], [15.5, 16], [11, 20], [6, 19], [9.5, 14]], p.c);
+    for (const x of [7, 9, 11]) P.px(x, 20, p.c);
+    P.rect(16, 15, 4, 5, p.c); P.rect(16, 20, 5, 2, n);
+    P.rect(14, 8, 7, 7, p.A); P.rect(14, 8, 7, 1, p.Q); P.rect(14, 8, 1, 7, p.a); P.rect(14, 13, 7, 1, p.B); P.px(17, 13, p.K);
+    P.rect(13, 7, 9, 2, p.C); P.px(13, 7, p.Y); P.px(21, 7, p.Y);
+    P.rect(20, 9, 3, 2, p.A); P.rect(23, 10, 2, 2, bone);
+    P.rect(25, 2, 1, 14, n); P.ell(25.5, 2, 2, 2, bone); P.px(25, 2, INK); P.px(26, 1, fire);
+    P.rect(15, 2, 5, 5, bone); P.rect(15, 6, 5, 1, bone2); P.px(20, 4, bone2); P.rect(17, 3, 2, 2, INK); P.px(18, 3, fire); P.px(16, 4, INK);
+    P.rect(16, 6, 3, 1, INK); P.px(17, 6, bone);
+    P.rect(14, 1, 7, 1, '#4a4a52'); P.px(14, 0, '#6a6a72'); P.px(16, 0, '#6a6a72'); P.px(18, 0, '#6a6a72'); P.px(20, 0, '#6a6a72'); P.px(17, 1, fire);
+  },
+  // скелет-воин: шлем, щит с черепом, ржавый меч (20×25)
+  mel(P, p, f) {
+    const b = '#ddd5bd', b2 = BONE2, rust = '#8a5a3a';
+    const o = f === 1 ? 1 : 0;
+    P.line(8 - o, 17, 8 - o, 23, b2); P.line(11 + o, 17, 11 + o, 23, b); P.rect(7 - o, 24, 3, 1, b2); P.rect(11 + o, 24, 3, 1, b);
+    P.rect(7, 15, 6, 2, b2); P.px(9, 16, INK); P.px(10, 16, INK);
+    P.rect(9, 9, 2, 7, b);
+    for (let y = 10; y < 15; y += 2) { P.rect(7, y, 6, 1, b); P.px(7, y + 1, b2); P.px(12, y + 1, b2); }
+    P.rect(6, 9, 8, 1, p.c); P.px(6, 10, p.c); P.px(13, 10, p.c); P.px(6, 11, p.C);
+    P.line(13, 10, 15, 13, b); P.px(15, 14, b);
+    P.rect(16, 3, 1, 12, '#a8a8a0'); P.rect(17, 4, 1, 10, '#8a8a82'); P.px(16, 2, '#c8c8c0'); P.px(16, 8, rust); P.px(17, 11, rust);
+    P.rect(14, 14, 5, 1, rust); P.rect(16, 15, 1, 2, p.D);
+    P.rect(7, 2, 6, 6, b); P.rect(7, 7, 6, 1, b2); P.rect(8, 4, 2, 2, INK); P.rect(11, 4, 2, 2, INK); P.px(9, 4, p.E); P.px(12, 4, p.E);
+    P.px(10, 6, INK); P.rect(8, 8, 4, 1, b); P.px(9, 8, INK); P.px(11, 8, INK);
+    P.rect(6, 1, 8, 2, p.A); P.rect(7, 0, 6, 1, p.A); P.rect(7, 1, 3, 1, p.Q); P.px(13, 2, rust); P.rect(10, 3, 1, 2, p.a);
+    P.ell(4, 15, 3.8, 4.4, p.A); P.ell(4, 15, 3, 3.6, p.C); P.rect(3, 13, 3, 3, b); P.px(3, 14, INK); P.px(5, 14, INK); P.px(4, 16, b2);
+    P.px(1, 12, rust); P.px(6, 18, p.a);
+  },
+  // скелет-лучник в рваном капюшоне (20×25)
+  rng(P, p, f) {
+    const b = '#ddd5bd', b2 = BONE2;
+    const o = f === 1 ? 1 : 0;
+    P.line(8 - o, 17, 8 - o, 23, b2); P.line(11 + o, 17, 11 + o, 23, b); P.rect(7 - o, 24, 3, 1, b2); P.rect(11 + o, 24, 3, 1, b);
+    P.rect(3, 9, 3, 8, '#3a2a2a'); P.px(3, 8, b); P.px(5, 8, b); P.px(4, 7, p.G);
+    P.poly([[6, 8], [13, 8], [14, 17], [5, 18]], p.c); for (let x = 5; x < 14; x += 2) P.px(x, 18, p.c);
+    P.rect(9, 10, 2, 6, b); for (let y = 11; y < 16; y += 2) P.rect(8, y, 4, 1, b2);
+    P.rect(7, 15, 6, 1, p.B);
+    P.poly([[6, 3], [13, 2], [14, 8], [6, 9]], p.c); P.rect(9, 3, 4, 5, b); P.rect(10, 4, 1, 1, INK); P.px(12, 4, INK); P.px(12, 4, p.E); P.px(10, 4, p.E);
+    P.px(11, 6, INK); P.rect(10, 7, 3, 1, b2); P.rect(7, 1, 5, 2, p.c); P.px(5, 5, p.c);
+    for (const [x, y] of [[15, 1], [16, 2], [17, 3], [18, 4], [18, 5], [18, 6], [18, 7], [18, 8], [18, 9], [18, 10], [18, 11], [18, 12], [18, 13], [17, 14], [16, 15], [15, 16]]) P.px(x, y, '#4a3a3a');
+    P.rect(15, 2, 1, 14, '#a8a8a0');
+    P.line(12, 10, 18, 9, b); P.rect(13, 9, 6, 1, '#8a6a4a'); P.px(19, 9, p.G);
+  },
+  // некромант: чёрная ряса, череп в капюшоне, посох с черепом (20×28)
+  mag(P, p, f) {
+    const cast = f === 2, hem = f === 1 ? 1 : 0, b = '#ddd5bd';
+    P.poly([[6, 9], [14, 9], [16, 27], [4 - hem, 27]], '#221c2a'); P.poly([[8, 9], [12, 9], [13, 27], [7, 27]], p.C);
+    for (let x = 4 - hem; x < 16; x += 2) P.px(x, 27 - (x % 4 ? 1 : 0), '#221c2a');
+    P.rect(6, 16, 8, 1, p.K); P.rect(9, 17, 2, 3, b); P.px(9, 18, INK);
+    P.poly([[5, 4], [10, 0], [15, 4], [15, 11], [5, 11]], '#221c2a'); P.rect(7, 4, 6, 6, '#120e16');
+    P.rect(8, 5, 4, 4, b); P.px(9, 6, p.G); P.px(11, 6, p.G); P.rect(9, 8, 2, 1, INK);
+    P.px(10, 0, p.K); P.px(9, 1, p.C); P.px(11, 1, p.C);
+    const top = cast ? 0 : 4;
+    P.rect(16, top + 4, 1, 28 - top - 4, '#2a2230');
+    P.ell(16.5, top + 2, 2.4, 2.2, b); P.px(16, top + 2, INK); P.px(17, top + 2, INK); P.rect(16, top + 4, 2, 1, BONE2);
+    P.px(15, top + 2, p.G); P.px(18, top + 2, p.G);
+    if (cast) { P.ell(16.5, top + 2, 3.4, 3.2, (x, y, nx, ny) => nx * nx + ny * ny > 0.6 ? p.G : null); P.px(13, top + 6, p.G); P.px(19, top + 7, p.G); P.px(12, top + 9, '#d0ffe0'); }
+    P.rect(13, cast ? 9 : 14, 3, 1, b);
+  },
+  // зомби-рабочий с лопатой (20×25)
+  bld(P, p, fr) {
+    const sk = '#8a9a78', sk2 = '#6a7a5a', rag = '#5a4a3a', rag2 = '#3a3028', trou = '#4a4038';
+    legs(P, 7, 11, 19, 5, fr === 'walk1' ? 1 : 0, trou, loC(trou), '#2a2018');
+    P.rect(6, 11, 8, 8, rag); P.rect(6, 11, 1, 8, rag2); for (let x = 6; x < 14; x++) P.px(x, 19 - (x % 2), rag);
+    P.px(9, 13, sk); P.px(11, 15, sk2); P.rect(6, 15, 8, 1, rag2);
+    P.rect(7, 5, 6, 6, sk); P.rect(7, 10, 6, 1, sk2); P.px(11, 7, '#e8f0a0'); P.px(9, 7, '#e8f0a0'); P.px(13, 8, sk2); P.rect(9, 9, 3, 1, '#3a2a2a'); P.px(10, 9, BONE);
+    P.rect(6, 4, 7, 2, '#3a3a32'); P.px(6, 6, '#3a3a32'); P.px(12, 4, sk2); P.px(8, 6, sk2);
+    if (fr === 'walk0' || fr === 'walk1') { P.rect(13, 12, 3, 1, sk); P.px(16, 12, sk); P.px(17, 12, sk2); P.rect(3, 14, 1, 6, '#4a3a2a'); P.rect(2, 12, 4, 3, STONE); P.px(2, 12, STONE2); }
+    else if (fr === 'work0') { P.rect(13, 8, 1, 4, sk); P.px(13, 7, sk); P.rect(14, 1, 1, 8, '#5a4a3a'); P.rect(13, 0, 3, 3, '#7a7a76'); P.px(13, 0, '#9a9a96'); }
+    else if (fr === 'work1') { P.rect(13, 12, 3, 1, sk); P.rect(16, 12, 3, 1, '#5a4a3a'); P.rect(18, 11, 2, 5, '#7a7a76'); }
+    else if (fr === 'fish') { P.rect(13, 11, 3, 1, sk); P.line(16, 10, 19, 0, '#5a4a3a'); }
+  },
+  vil(P, f, v) {
+    // горожане-призраки и бледные слуги
+    if (v % 2 === 0) {
+      const g = v ? '#c8d8e0' : '#b8e0d0', g2 = v ? '#90a8b8' : '#88b8a8';
+      P.poly([[2, 3], [8, 3], [9, 15 + f], [7, 13], [5, 16 - f], [3, 13], [1, 15]], g); P.rect(2, 3, 1, 10, g2);
+      P.ell(5, 4, 3, 3.4, g); P.px(4, 4, INK); P.px(6, 4, INK); P.rect(4, 6, 2, 1, g2); P.px(8, 8, g2);
+    } else {
+      const C = v === 1 ? '#4a3a5a' : '#3a4a4a';
+      legs(P, 3, 6, 12, 4, f, '#2a2430', '#1e1a22', '#141016', 1);
+      P.rect(2, 6, 6, 7, C); P.rect(2, 6, 1, 7, loC(C)); P.rect(2, 9, 6, 1, '#1e1a22');
+      P.rect(3, 2, 4, 4, '#c0c4b0'); P.px(6, 3, '#7affa0'); P.rect(2, 0, 6, 3, C); P.px(2, 3, C);
+      if (v === 3) { P.rect(8, 6, 1, 6, '#3a2a2a'); P.rect(7, 5, 3, 2, '#7affa0'); }
+    }
+  },
+  tax(P, f, p) {
+    const g = '#b8d8e0', g2 = '#88a8b8';
+    P.poly([[2, 4], [9, 4], [10, 15 + f], [8, 13], [6, 16 - f], [4, 13], [1, 15]], g); P.rect(2, 4, 1, 10, g2);
+    P.ell(5.5, 4.5, 3, 3.4, g); P.px(5, 4, INK); P.px(7, 4, INK); P.rect(2, 0, 7, 2, '#2a1d2a'); P.rect(1, 2, 9, 1, '#2a1d2a'); P.px(5, 0, p.K);
+    P.rect(10, 6, 1, 4, '#4a4a4a'); P.rect(9, 9, 3, 3, '#7affa0'); P.px(10, 10, '#ffffff');
+  },
+  // вурдалак: сгорбленный великан с когтями (27×24)
+  bst(P, p, f) {
+    const S1 = '#9aa48a', S2 = '#727c64', S3 = '#b8c0a6', claw = '#e8e0c8';
+    const lx = f === 0 ? [6, 14] : [5, 15];
+    P.rect(lx[0], 17, 3, 6, S2); P.rect(lx[1], 17, 3, 6, S1); P.rect(lx[0] - 1, 23, 5, 1, S2); P.rect(lx[1], 23, 5, 1, S2);
+    P.ell(11, 12, 9, 6.5, sh3(S3, S1, S2, -0.55, 0.5));
+    for (let i = 0; i < 4; i++) P.line(8 + i * 3, 10, 7 + i * 3, 15, S2);
+    for (const x of [6, 9, 12]) P.px(x, 6, S2);
+    P.rect(5, 16, 12, 2, p.C); P.px(8, 17, p.c); P.px(13, 17, p.c); for (let x = 5; x < 17; x += 2) P.px(x, 18, p.C);
+    P.rect(16, 6, 7, 6, S1); P.rect(16, 6, 7, 1, S3); P.rect(22, 9, 2, 3, S1);
+    P.px(19, 8, p.E); P.px(21, 8, p.E); P.rect(18, 11, 5, 1, INK); P.px(19, 11, claw); P.px(21, 11, claw); P.px(17, 5, S2);
+    P.rect(2, 9, 3, 9, S2); P.px(1, 18, claw); P.px(3, 18, claw); P.px(5, 18, claw);
+    P.rect(19, 12, 3, 6, S1); P.px(18, 18, claw); P.px(20, 19, claw); P.px(22, 18, claw);
+  },
+  // призрачный рыцарь: парящий балахон, коса (28×29)
+  unq(P, p, f) {
+    const c1 = '#3a3248', c2 = '#241e30', c3 = '#5a4e6a', b = '#ddd5bd', g = p.G, bob = f ? 1 : 0;
+    for (let i = 0; i < 6; i++) P.line(7 + i * 3, 22 + bob, 6 + i * 3 + (i % 2), 28, i % 2 ? 'rgba(122,255,160,0.35)' : 'rgba(122,255,160,0.2)');
+    P.poly([[9, 6 + bob], [19, 6 + bob], [24, 24 + bob], [20, 22 + bob], [17, 26 + bob], [13, 22 + bob], [9, 26 + bob], [5, 22 + bob]], c1);
+    P.poly([[9, 6 + bob], [13, 6 + bob], [11, 24 + bob], [7, 22 + bob]], c2); P.line(19, 7 + bob, 23, 23 + bob, c3);
+    P.poly([[9, 8 + bob], [14, 0 + bob], [19, 8 + bob], [19, 13 + bob], [9, 13 + bob]], c2);
+    P.rect(11, 6 + bob, 6, 6, '#0e0a12'); P.rect(12, 7 + bob, 4, 4, b); P.px(13, 8 + bob, g); P.px(15, 8 + bob, g); P.rect(13, 10 + bob, 2, 1, INK);
+    P.rect(10, 14 + bob, 8, 2, p.C); P.px(14, 15 + bob, p.K);
+    P.line(20, 12 + bob, 26, 1, '#4a3a3a', 1); P.line(26, 1, 26, 26, '#4a3a3a'); P.line(26, 1, 18, 2, '#c8ccd0'); P.line(25, 2, 19, 4, '#a8acb0'); P.px(18, 3, '#ffffff');
+    P.rect(19, 12 + bob, 3, 2, b); P.px(3, 12 + bob, g); P.px(1, 18 + bob, g);
+  },
+  // костемёт (30×22)
+  cat(P, p, f) {
+    const w = '#3a3030', wd = '#241e1e', wl = '#5a4a48', b = '#ddd5bd', b2 = BONE2;
+    P.rect(3, 15, 24, 3, w); P.rect(3, 15, 24, 1, wl);
+    P.line(9, 15, 14, 7, wd, 2); P.line(20, 15, 15, 7, wd, 2); P.rect(13, 6, 4, 2, w);
+    for (const cx of [7, 23]) { P.ell(cx, 18.5, 3.5, 3.5, b2); P.ell(cx, 18.5, 2.2, 2.2, wd); P.px(cx, 18, b); }
+    if (f === 0) { P.line(15, 8, 4, 13, b, 2); P.ell(3.5, 12, 2.6, 2.2, b); P.px(3, 11, INK); P.px(5, 11, INK); }
+    else { P.line(15, 8, 17, 0, b, 2); P.ell(17.5, 1, 2.2, 1.6, b2); }
+    P.rect(17, 9, 4, 4, '#4a4a52'); P.rect(17, 9, 4, 1, '#6a6a72'); P.rect(18, 10, 2, 2, '#2a2a30');
+    P.rect(26, 6, 1, 9, wd); P.rect(27, 6, 3, 2, p.C); P.px(27, 8, p.C); P.px(28, 7, p.G);
+    for (const [x, y] of [[25, 20], [21, 21], [11, 21]]) { P.rect(x, y - 1, 2, 2, b); P.px(x, y - 1, INK); }
+  },
+};
+
+RSTY.dwarf = DW; RSTY.elf = EL; RSTY.undead = UD;
+
 // ================== ПИКСЕЛЬ-АРТ: ПОСТРОЙКИ ==================
 // Каменная кладка: кирпичи 4×2 со смещением рядов
 function brick(P, x, y, w, h, seed = 1, base = STONE, joint = STONE3, hi = STONE2) {
@@ -1602,7 +2121,8 @@ function paintForge(P, w, h, p, st, lvl) {
   } else if (st === 'tent') {
     for (let y = 0; y < roofH; y++) for (let x = fx - 2 + Math.floor((roofH - y) * 0.6); x < fx + fw + 1; x++) P.px(x, roofY + y, (Math.floor(x / 3) % 2) ? p.R : p.r);
     for (let x = fx; x < fx + fw; x += 5) { P.px(x, roofY + roofH, BONE); P.px(x, roofY + roofH + 1, BONE); }
-  } else {
+  } else if (RSTY[st]) RSTY[st].B.forgeRoof(P, fx, fw, roofY, roofH, p);
+  else {
     P.ell(fx + fw / 2, roofY + roofH, fw / 2 + 2, roofH + 2, (x, y, nx, ny) => ny > 0.1 ? null : ((x + y) % 4 === 0 ? p.r : p.R));
     P.rect(fx + 4, roofY - 6, 2, 8, STONE3); P.rect(fx + 3, roofY - 7, 4, 2, STONE); P.ell(fx + fw - 4, roofY + 2, 3, 3, '#7a6a4a'); P.ell(fx + fw - 4, roofY + 2, 1.2, 1.2, STONE3);
   }
@@ -1994,6 +2514,533 @@ function buildBuildingTextures(scene) {
   }
 }
 
+// ================== ПОСТРОЙКИ ГНОМОВ, ЭЛЬФОВ И НЕЖИТИ ==================
+const GRAN = ['#8a8478', '#5e5a52', '#aaa496'];      // гранит гномов
+const MARB = ['#e2ded2', '#b8b4a6', '#f6f4ec'];      // белый камень эльфов
+const GOTH = ['#4a4654', '#2e2a36', '#625e6e'];      // чёрный камень нежити
+const brk = (P, x, y, w, h, seed, c) => brick(P, x, y, w, h, seed, c[0], c[1], c[2]);
+const GLOWU = '#7affa0';
+// луковичный купол-лист: острый кончик, вздутие, сужение к основанию
+function onion(P, cx, baseY, half, height, c1, c2, hi, tip) {
+  for (let y = 0; y < height; y++) {
+    const t = (y + 0.5) / height, hw = Math.max(0.5, half * Math.sin(Math.PI * Math.min(0.92, 0.1 + 0.9 * Math.pow(t, 0.8))));
+    for (let x = Math.floor(cx - hw); x < Math.ceil(cx + hw); x++) P.px(x, baseY - height + y, x < cx - hw * 0.35 ? hi : ((x + y) % 4 === 0 ? c2 : c1));
+  }
+  if (tip) { P.px(cx - 0.5, baseY - height - 1, tip); P.px(cx - 0.5, baseY - height - 2, tip); }
+}
+// крыша-лист с загнутыми краями
+function leafRoof(P, x0, x1, baseY, height, c1, c2, hi) {
+  const cx = (x0 + x1) / 2, half = (x1 - x0) / 2;
+  for (let y = 0; y < height; y++) {
+    const t = (y + 1) / height, hw = Math.max(0.5, half * Math.pow(t, 1.7));
+    for (let x = Math.floor(cx - hw); x < Math.ceil(cx + hw); x++) P.px(x, baseY - height + y, x < cx - hw * 0.4 ? hi : ((x * 2 + y) % 5 === 0 ? c2 : c1));
+  }
+  P.px(x0 - 1, baseY - 2, c1); P.px(x1, baseY - 2, c1); P.px(x0 - 2, baseY - 3, hi); P.px(x1 + 1, baseY - 3, c1);
+  P.rect(Math.floor(x0), baseY - 1, Math.ceil(x1 - x0), 1, c2);
+}
+const roundWin = (P, x, y, r, frame, glow) => { P.ell(x, y, r + 1, r + 1, frame); P.ell(x, y, r, r, glow); P.px(x - 1, y - 1, '#ffffff'); };
+const archDoor = (P, cx, bottom, dw, dh, frame, fill, knob) => {
+  const x = Math.floor(cx - dw / 2);
+  P.rect(x - 1, bottom - dh + 2, dw + 2, dh - 2, frame); P.ell(cx, bottom - dh + 3, dw / 2 + 1, 3, frame);
+  P.rect(x, bottom - dh + 3, dw, dh - 3, fill); P.ell(cx, bottom - dh + 3, dw / 2, 2.2, fill);
+  for (let xx = x + 1; xx < x + dw; xx += 2) P.rect(xx, bottom - dh + 3, 1, dh - 3, mix(fill, '#000000', 0.25));
+  if (knob) P.px(x + dw - 2, bottom - Math.floor(dh / 2), knob);
+};
+const grave = (P, x, y, c = '#7a7684') => { P.rect(x, y - 5, 4, 5, c); P.rect(x + 1, y - 6, 2, 1, c); P.px(x, y - 5, '#9a96a4'); P.px(x + 1, y - 4, '#3a3640'); P.px(x + 2, y - 4, '#3a3640'); P.px(x + 1, y - 3, '#3a3640'); };
+const cross = (P, x, y, c = '#6a6670') => { P.rect(x + 1, y - 7, 1, 7, c); P.rect(x, y - 5, 3, 1, c); };
+const brazier = (P, x, y, fire = '#e0702b') => { P.rect(x - 2, y, 5, 2, STONE3); P.rect(x - 1, y + 2, 3, 2, STONE3); P.px(x - 1, y - 1, fire); P.px(x, y - 2, '#f2c14e'); P.px(x + 1, y - 1, fire); P.px(x, y - 1, '#fff1b0'); };
+const rocky = (P, pts, seed, c = GRAN) => {
+  P.poly(pts, (x, y) => ((x * 7 + y * 13 + seed) % 23 === 0 ? c[1] : ((x + y * 3) % 17 === 0 ? c[2] : c[0])));
+  for (let i = 0; i + 1 < pts.length; i++) { const [ax, ay] = pts[i], [bx, by] = pts[i + 1]; if (ay > 0 && by > 0) P.line(ax, ay, bx, by, by < ay ? c[2] : c[1]); }
+};
+
+// ---------------------------------------------------------------- ГНОМЫ
+const DWB = {
+  shelter(P, w, h, p, big, seed) {
+    const cx = Math.floor(w / 2), top = big ? 4 : 2;
+    if (big) rocky(P, [[0, h], [1, top + 18], [6, top + 6], [12, top + 10], [19, top], [27, top + 6], [34, top + 2], [41, top + 9], [w - 1, top + 17], [w, h]], seed);
+    const bodyTop = big ? top + 18 : top + Math.round((h - top) * 0.42), roofH = big ? 7 : Math.round((h - top) * 0.4);
+    // низкая сланцевая крыша с плоским коньком
+    for (let y = 0; y < roofH; y++) {
+      const hw = Math.round(w * 0.2 + (y + 1) / roofH * (w * 0.32));
+      for (let x = cx - hw; x < cx + hw; x++) P.px(x, bodyTop - roofH + y, y % 2 ? p.r : ((x + y) % 4 === 0 ? p.r : (x < cx ? hiC(p.R, 0.12) : p.R)));
+    }
+    P.rect(cx - Math.round(w * 0.2), bodyTop - roofH, Math.round(w * 0.4), 1, p.K);
+    const chx = cx + Math.round(w * 0.22); brk(P, chx, bodyTop - roofH - 4, 4, roofH + 4, seed + 2, GRAN); P.rect(chx - 1, bodyTop - roofH - 5, 6, 1, GRAN[1]); P.px(chx + 1, bodyTop - roofH - 6, '#e0702b');
+    // кладка и контрфорсы
+    brk(P, 2, bodyTop, w - 4, h - bodyTop - 1, seed, GRAN);
+    P.rect(1, bodyTop - 1, w - 2, 2, GRAN[1]); P.rect(1, bodyTop - 1, w - 2, 1, GRAN[2]);
+    P.poly([[0, h - 1], [3, bodyTop + 1], [5, bodyTop + 1], [5, h - 1]], GRAN[1]); P.poly([[w, h - 1], [w - 3, bodyTop + 1], [w - 5, bodyTop + 1], [w - 5, h - 1]], GRAN[1]);
+    // окна с огнём горна
+    const wy = bodyTop + (big ? 5 : 3);
+    for (const x of big ? [7, w - 11] : [6, w - 10]) { P.rect(x - 1, wy - 1, 6, 6, GRAN[1]); P.rect(x, wy, 4, 4, p.G); P.rect(x, wy, 2, 2, '#fff1b0'); P.rect(x + 1, wy, 1, 4, GRAN[1]); P.rect(x - 1, wy - 2, 6, 1, p.K); }
+    // ворота с притолокой и руной
+    const dw = big ? 12 : 8, dh = big ? 15 : 11, dx = cx - dw / 2;
+    P.rect(dx - 2, h - dh - 4, dw + 4, 3, GRAN[2]); P.rect(dx - 2, h - dh - 2, dw + 4, 1, GRAN[1]);
+    P.rect(dx - 2, h - dh - 1, 2, dh, GRAN[1]); P.rect(dx + dw, h - dh - 1, 2, dh, GRAN[1]);
+    P.rect(dx, h - dh - 1, dw, dh, '#4a3020'); for (let x = dx + 1; x < dx + dw; x += 3) P.rect(x, h - dh - 1, 1, dh, '#3a2418');
+    P.rect(dx, h - dh + 2, dw, 1, '#5a5a5a'); P.rect(dx, h - 5, dw, 1, '#5a5a5a'); P.px(dx + dw - 3, h - Math.floor(dh / 2) - 1, p.K);
+    P.px(cx - 1, h - dh - 3, p.G); P.px(cx, h - dh - 3, p.G); P.px(cx - 2, h - dh - 3, p.K); P.px(cx + 1, h - dh - 3, p.K);
+    if (big) {
+      for (const x of [dx - 6, dx + dw + 3]) { P.rect(x, wy + 9, 3, 9, p.C); P.rect(x, wy + 17, 3, 1, p.c); P.px(x + 1, wy + 12, p.K); P.rect(x - 1, wy + 8, 5, 1, p.K); }
+      flag(P, cx, top - 3 > 0 ? top - 3 : 0, p, 6);
+    }
+    for (let x = 0; x < w; x++) P.px(x, h - 1, x % 3 === 0 ? GRAN[1] : GRAN[0]);
+  },
+  castle(P, w, h, p, lvl, seed) {
+    const cx = Math.floor(w / 2);
+    rocky(P, [[0, h], [0, 22], [6, 12], [12, 18], [19, 4], [27, 10], [cx, 0], [w - 27, 8], [w - 18, 3], [w - 11, 15], [w - 5, 10], [w, 20], [w, h]], seed);
+    const fw = Math.round(w * 0.66), fx = cx - Math.floor(fw / 2), fTop = Math.round(h * (lvl === 3 ? 0.36 : 0.4));
+    brk(P, fx, fTop, fw, h - fTop, seed + 1, GRAN); P.rect(fx, fTop, fw, 1, GRAN[2]); crenels(P, fx, fTop, fw, GRAN[0], GRAN[2]);
+    P.rect(fx, fTop + 3, fw, 1, p.K);
+    // донжон
+    const kw = Math.round(w * 0.3), kTop = Math.round(h * (lvl === 3 ? 0.08 : 0.16));
+    brk(P, cx - Math.floor(kw / 2), kTop, kw, fTop - kTop + 2, seed + 3, GRAN); P.rect(cx - Math.floor(kw / 2), kTop, 1, fTop - kTop, GRAN[2]);
+    if (lvl === 3) { for (let y = 0; y < 8; y++) { const hw = Math.round((y + 1) / 8 * (kw / 2 + 1)); P.rect(cx - hw, kTop - 8 + y, hw * 2, 1, y % 2 ? p.k : p.K); } P.px(cx - 1, kTop - 9, '#fff1b0'); }
+    else crenels(P, cx - Math.floor(kw / 2), kTop, kw, GRAN[0], GRAN[2]);
+    for (const x of [cx - 6, cx + 3]) { P.rect(x, kTop + 5, 3, 5, GRAN[1]); P.rect(x, kTop + 6, 3, 4, p.G); P.px(x, kTop + 6, '#fff1b0'); }
+    P.rect(cx - 4, kTop + 13, 8, 9, p.C); P.rect(cx - 4, kTop + 21, 8, 1, p.c); P.rect(cx - 1, kTop + 15, 2, 4, p.K); P.rect(cx - 2, kTop + 16, 4, 1, p.K);
+    flag(P, cx, Math.max(0, kTop - (lvl === 3 ? 18 : 9)), p, 6);
+    // угловые башни с жаровнями
+    const tw = Math.round(w * 0.14), tTop = Math.round(h * 0.3);
+    const tower = (x, tt) => { brk(P, x, tt, tw, h - tt, seed + x, GRAN); P.rect(x, tt, 1, h - tt, GRAN[2]); P.rect(x - 1, tt - 2, tw + 2, 3, GRAN[1]); crenels(P, x - 1, tt - 2, tw + 2, GRAN[0], GRAN[2]); brazier(P, x + Math.floor(tw / 2), tt - 6); P.rect(x + Math.floor(tw / 2) - 1, tt + 5, 2, 4, '#1a120c'); P.px(x + Math.floor(tw / 2) - 1, tt + 6, p.G); };
+    tower(fx - Math.floor(tw / 2), tTop); tower(fx + fw - Math.ceil(tw / 2), tTop);
+    if (lvl === 3) { tower(cx - Math.floor(kw / 2) - tw + 1, tTop - 8); tower(cx + Math.ceil(kw / 2) - 1, tTop - 8); }
+    // статуи-стражи у ворот
+    const statue = x => { P.rect(x - 3, h - 4, 7, 4, GRAN[1]); P.rect(x - 2, h - 16, 5, 12, GRAN[0]); P.rect(x - 2, h - 16, 1, 12, GRAN[2]); P.rect(x - 2, h - 20, 5, 4, GRAN[2]); P.rect(x - 2, h - 21, 5, 1, GRAN[1]); P.rect(x - 2, h - 17, 5, 5, mix(GRAN[0], p.H, 0.35)); P.px(x, h - 19, GRAN[1]); P.rect(x + 3, h - 22, 1, 18, GRAN[1]); P.rect(x + 2, h - 23, 3, 2, GRAN[2]); };
+    statue(cx - 11); statue(cx + 11);
+    // ворота
+    const gw = 12, gh = 17;
+    P.rect(cx - gw / 2 - 2, h - gh - 3, gw + 4, gh + 3, GRAN[2]); P.rect(cx - gw / 2 - 2, h - gh - 3, gw + 4, 2, p.K);
+    P.rect(cx - gw / 2, h - gh, gw, gh, '#2a1a10'); for (let x = cx - gw / 2 + 1; x < cx + gw / 2; x += 3) P.rect(x, h - gh, 1, gh, '#4a3020');
+    P.rect(cx - gw / 2, h - gh + 4, gw, 1, '#6a6a6a'); P.rect(cx - gw / 2, h - 6, gw, 1, '#6a6a6a'); P.rect(cx - 1, h - gh, 2, gh, '#1a100a');
+    P.px(cx - 3, h - gh - 2, p.G); P.px(cx, h - gh - 2, p.G); P.px(cx + 3, h - gh - 2, p.G);
+  },
+  forgeRoof(P, fx, fw, roofY, roofH, p) {
+    P.rect(fx - 3, roofY + roofH - 5, fw + 5, 5, GRAN[0]); P.rect(fx - 3, roofY + roofH - 5, fw + 5, 1, GRAN[2]); P.rect(fx - 3, roofY + roofH - 1, fw + 5, 1, p.K);
+    for (let x = fx - 2; x < fx + fw; x += 4) P.px(x, roofY + roofH - 3, GRAN[1]);
+    P.rect(fx + 2, roofY + roofH - 9, 5, 4, GRAN[1]); P.px(fx + 4, roofY + roofH - 8, p.G);
+  },
+  guild(P, w, h, p, lvl) {
+    const cx = Math.floor(w / 2), tw = Math.round(w * 0.62), tx = cx - Math.floor(tw / 2), ttop = Math.round(h * (lvl === 2 ? 0.24 : 0.3));
+    brk(P, tx, ttop, tw, h - ttop, 21, GRAN); P.rect(tx, ttop, 1, h - ttop, GRAN[2]); P.rect(tx + tw - 1, ttop, 1, h - ttop, GRAN[1]);
+    P.poly([[tx - 2, h], [tx, h - 10], [tx, h]], GRAN[1]); P.poly([[tx + tw + 2, h], [tx + tw, h - 10], [tx + tw, h]], GRAN[1]);
+    P.rect(tx - 2, ttop - 3, tw + 4, 3, GRAN[1]); P.rect(tx - 2, ttop - 3, tw + 4, 1, p.K); crenels(P, tx - 2, ttop - 3, tw + 4, GRAN[0], GRAN[2]);
+    // руны по башне
+    for (let y = ttop + 4; y < h - 12; y += 7) { P.rect(cx - 1, y, 3, 1, p.G); P.px(cx, y + 1, p.G); P.px(cx - 1, y + 2, p.G); P.px(cx + 1, y + 2, p.G); }
+    // кристалл-руна на вершине
+    const cy = ttop - 8 - (lvl === 2 ? 4 : 0), ch = lvl === 2 ? 12 : 8;
+    P.poly([[cx, cy - ch / 2], [cx + 4, cy], [cx, cy + ch / 2], [cx - 4, cy]], p.G); P.poly([[cx, cy - ch / 2], [cx, cy + ch / 2], [cx - 4, cy]], hiC(p.G, 0.4)); P.px(cx - 1, cy - 1, '#ffffff');
+    P.rect(cx - 3, cy + ch / 2, 6, 2, GRAN[1]);
+    if (lvl === 2) { P.ell(cx, cy, 7, 2, (x, y, nx, ny) => nx * nx + ny * ny > 0.65 ? p.K : null); }
+    // менгиры
+    for (const x of [1, w - 4]) { P.rect(x, h - 12, 3, 12, GRAN[0]); P.rect(x, h - 12, 1, 12, GRAN[2]); P.px(x + 1, h - 9, p.G); P.px(x + 1, h - 6, p.G); P.rect(x, h - 13, 2, 1, GRAN[0]); }
+    P.rect(cx - 3, h - 9, 6, 9, GRAN[1]); P.rect(cx - 2, h - 8, 4, 8, '#2a1a10'); P.px(cx + 1, h - 4, p.K);
+  },
+  bank(P, w, h, p) {
+    const cx = Math.floor(w / 2);
+    rocky(P, [[0, h], [2, 12], [9, 4], [17, 7], [25, 0], [33, 5], [41, 2], [w - 2, 11], [w, h]], 5);
+    P.rect(6, 14, w - 12, h - 14, GRAN[1]); brk(P, 7, 15, w - 14, h - 16, 31, GRAN);
+    for (const x of [8, w - 12]) { P.rect(x, 15, 4, h - 16, GRAN[2]); P.rect(x + 3, 15, 1, h - 16, GRAN[1]); P.rect(x - 1, 14, 6, 2, p.K); }
+    const r = 9, vy = h - 11;
+    P.ell(cx, vy, r + 1.5, r + 1.5, GRAN[1]);
+    for (let a = 0; a < 12; a++) P.rect(Math.round(cx + Math.cos(a * 0.52) * (r + 1)) - 1, Math.round(vy + Math.sin(a * 0.52) * (r + 1)) - 1, 2, 2, p.k);
+    P.ell(cx, vy, r, r, p.K); P.ell(cx, vy, r - 2, r - 2, '#b8862a'); P.ell(cx, vy, 3, 3, p.K);
+    for (let a = 0; a < 4; a++) P.line(cx, vy, cx + Math.cos(a * 1.57 + 0.4) * 6, vy + Math.sin(a * 1.57 + 0.4) * 6, '#8a6a20');
+    P.px(cx - 2, vy - 3, '#fff1b0');
+    for (const [x, n] of [[3, 4], [w - 8, 5]]) for (let i = 0; i < n; i++) P.rect(x + (i % 3), h - 2 - Math.floor(i / 2), 2, 1, i % 2 ? p.K : '#fff1b0');
+    P.rect(0, h - 1, w, 1, GRAN[1]);
+  },
+  outpost(P, w, h, p) {
+    rocky(P, [[0, h], [1, 8], [8, 2], [16, 5], [23, 0], [31, 4], [39, 1], [w - 1, 8], [w, h]], 9);
+    for (const cx of [11, w - 12]) {
+      P.ell(cx, h - 1, 8, 12, GRAN[1]); P.ell(cx, h - 1, 6.5, 10.5, '#0e0a08');
+      for (let x = cx - 5; x <= cx + 5; x += 2) P.rect(x, h - 11, 1, 11, '#5a5a62');
+      P.rect(cx - 6, h - 9, 13, 1, '#6a6a72'); P.px(cx - 1, h - 5, '#ffb040'); P.px(cx + 2, h - 5, '#ffb040');
+    }
+    P.rect(Math.floor(w / 2) - 4, 8, 9, 10, p.C); P.rect(Math.floor(w / 2) - 4, 17, 9, 1, p.c); P.rect(Math.floor(w / 2) - 2, 10, 5, 4, p.K); P.rect(Math.floor(w / 2) - 5, 7, 11, 1, p.K);
+  },
+  tower(P, w, h, p, lvl) {
+    const cx = Math.floor(w / 2);
+    if (lvl === 1) {
+      const top = Math.round(h * 0.34), base = Math.round(h * 0.62);
+      brk(P, 0, base, w, h - base, 61, GRAN); P.rect(0, base, w, 1, GRAN[2]);
+      P.rect(1, top, 2, base - top, p.D); P.rect(w - 3, top, 2, base - top, p.D);
+      for (let y = top + 3; y < base - 2; y += 6) { P.line(2, y, w - 3, y + 5, p.l); P.line(w - 3, y, 2, y + 5, p.l); }
+      P.rect(0, top - 5, w, 5, GRAN[0]); P.rect(0, top - 5, w, 1, GRAN[2]); P.rect(0, top - 1, w, 1, p.K);
+      brazier(P, cx, top - 9); flag(P, 1, 0, p, 3);
+    } else {
+      const top = Math.round(h * 0.2);
+      brk(P, 0, top, w, h - top, 81, GRAN); P.rect(0, top, 1, h - top, GRAN[2]);
+      P.poly([[0, h], [0, h - 8], [-2, h]], GRAN[1]);
+      P.rect(-1, top - 3, w + 2, 4, GRAN[1]); P.rect(-1, top - 3, w + 2, 1, p.K); crenels(P, -1, top - 3, w + 2, GRAN[0], GRAN[2]);
+      brazier(P, cx, top - 8);
+      for (let y = top + 5; y < h - 8; y += 9) { P.rect(cx - 1, y, 3, 4, GRAN[1]); P.rect(cx, y + 1, 1, 3, p.G); }
+      P.rect(cx - 3, h - 8, 6, 8, GRAN[1]); P.rect(cx - 2, h - 7, 4, 7, '#2a1a10');
+      P.rect(1, top + 2, 3, 7, p.C); P.px(2, top + 4, p.K);
+    }
+  },
+  uniqhome(P, w, h, p) {
+    brk(P, 4, 12, w - 8, h - 12, 33, GRAN); P.rect(2, 10, w - 4, 3, GRAN[1]); P.rect(2, 10, w - 4, 1, p.K);
+    P.poly([[2, 11], [w / 2, 3], [w - 2, 11]], p.R); P.line(2, 11, w / 2, 3, hiC(p.R)); P.px(w / 2, 2, p.K);
+    brk(P, w - 12, 0, 5, 12, 34, GRAN); P.px(w - 10, 0, '#e0702b');
+    const gx = 12, gy = 21; P.ell(gx, gy, 6, 6, '#8a6a20'); P.ell(gx, gy, 4, 4, p.K); P.ell(gx, gy, 1.5, 1.5, '#5a4a20');
+    for (let a = 0; a < 8; a++) P.rect(Math.round(gx + Math.cos(a * 0.785) * 6.5) - 1, Math.round(gy + Math.sin(a * 0.785) * 6.5) - 1, 2, 2, '#8a6a20');
+    P.rect(24, 16, 14, h - 16, '#1a120c'); P.rect(25, h - 7, 12, 6, '#5a1a0a'); P.rect(26, h - 6, 10, 4, '#e0702b'); P.rect(28, h - 5, 6, 2, '#f2c14e');
+    P.rect(23, 15, 16, 1, GRAN[2]); P.rect(29, 18, 4, 6, '#6c747c'); P.px(30, 20, p.G); P.px(31, 20, p.G);
+    flag(P, Math.floor(w / 2), 0, p, 3);
+  },
+  annex(P, x0, w, h, p) {
+    const ww = w - x0;
+    P.rect(x0, h - 3, ww, 3, GRAN[1]);
+    for (const x of [x0 + 1, w - 3]) { P.rect(x, h - 18, 2, 15, GRAN[0]); P.rect(x, h - 18, 1, 15, GRAN[2]); }
+    P.rect(x0, h - 20, ww, 3, GRAN[0]); P.rect(x0, h - 20, ww, 1, p.K);
+    P.ell(x0 + ww / 2, h - 10, 4, 4, '#7a5234'); P.ell(x0 + ww / 2, h - 10, 2.5, 2.5, p.C); P.px(x0 + ww / 2, h - 10, p.K);
+    P.line(x0 + 4, h - 17, x0 + 4, h - 13, p.D); P.rect(x0 + 3, h - 13, 3, 2, '#cdd3d9');
+  },
+  wall(P, w, h, p, lvl) {
+    if (lvl === 1) {
+      for (let y = h - 3, row = 0; y > 6; y -= 4, row++) for (let x = (row % 2) ? -2 : 0; x < w; x += 5) { P.rect(x, y - 3, 5, 4, row % 2 ? GRAN[0] : mix(GRAN[0], '#000000', 0.08)); P.rect(x, y - 3, 5, 1, GRAN[2]); P.rect(x + 4, y - 3, 1, 4, GRAN[1]); }
+      P.rect(0, 4, w, 3, p.D); P.rect(0, 4, w, 1, p.l); P.px(3, 5, p.K); P.px(9, 5, p.K);
+    } else {
+      const top = lvl === 3 ? 10 : 4;
+      brk(P, 0, top, w, h - top, 41 + lvl, GRAN); P.rect(0, top, w, 1, GRAN[2]); P.rect(0, top + 2, w, 1, p.K);
+      for (let x = 0; x < w - 1; x += 4) { P.rect(x, top - 3, 3, 3, GRAN[0]); P.rect(x, top - 3, 3, 1, GRAN[2]); }
+      P.rect(4, top + 6, w - 8, 9, p.C); P.rect(4, top + 14, w - 8, 1, p.c); P.rect(Math.floor(w / 2) - 1, top + 8, 2, 4, p.K);
+      if (lvl === 3) { P.rect(Math.floor(w / 2) - 1, top + 18, 2, 4, '#1a120c'); flag(P, w - 2, 0, p, 1); }
+    }
+  },
+  cwall(P, w, h, p, lvl) {
+    if (lvl === 1) { for (let y = h - 3, row = 0; y > 4; y -= 4, row++) for (let x = (row % 2) ? -2 : 0; x < w; x += 5) { P.rect(x, y - 3, 5, 4, GRAN[0]); P.rect(x, y - 3, 5, 1, GRAN[2]); P.rect(x + 4, y - 3, 1, 4, GRAN[1]); } }
+    else { brk(P, 0, 5, w, h - 5, 91, GRAN); for (let x = 0; x < w - 1; x += 4) P.rect(x, 2, 3, 3, GRAN[0]); P.rect(0, 7, w, 1, p.K); P.rect(w / 2 - 1, 11, 2, 5, '#1a120c'); }
+  },
+};
+
+// ---------------------------------------------------------------- ЭЛЬФЫ
+const WOOD = ['#b8986a', '#8a6a44', '#d8b888'], BARK = ['#6a4a2a', '#4a3218', '#8a6a3a'];
+const ELB = {
+  shelter(P, w, h, p, big, seed) {
+    const cx = Math.floor(w / 2), R0 = rng(seed);
+    if (big) {
+      // дом вокруг великого дерева
+      P.ell(cx, 13, w / 2 - 1, 12, (x, y, nx, ny) => ny < -0.4 ? hiC(p.R, 0.2) : ny > 0.5 ? p.r : ((x * 3 + y) % 7 === 0 ? p.r : p.R));
+      for (let i = 0; i < 18; i++) P.px(3 + Math.floor(R0() * (w - 6)), 3 + Math.floor(R0() * 18), R0() < 0.5 ? hiC(p.R, 0.35) : '#e8a0c0');
+      P.poly([[cx - 7, h], [cx - 5, 20], [cx - 3, 14], [cx + 3, 14], [cx + 5, 20], [cx + 7, h]], BARK[0]);
+      for (let y = 16; y < h; y += 3) P.px(cx - 4 + (y % 2), y, BARK[1]); P.line(cx + 4, 18, cx + 5, h, BARK[2]);
+      P.line(cx - 4, 20, cx - 12, 16, BARK[0], 2); P.line(cx + 4, 19, cx + 13, 15, BARK[0], 2);
+      const pod = x => { P.rect(x - 6, h - 15, 12, 14, WOOD[0]); for (let xx = x - 6; xx < x + 6; xx += 3) P.rect(xx, h - 15, 1, 14, WOOD[1]); leafRoof(P, x - 7, x + 7, h - 14, 9, p.R, p.r, hiC(p.R, 0.2)); roundWin(P, x, h - 9, 2, BARK[1], p.G); };
+      pod(7); pod(w - 8);
+      archDoor(P, cx, h - 1, 7, 12, BARK[1], '#3a2614', p.K);
+      for (const x of [cx - 9, cx + 9]) { P.rect(x, h - 22, 1, 4, BARK[1]); P.rect(x - 1, h - 18, 3, 3, p.G); P.px(x, h - 17, '#ffffff'); }
+      flag(P, cx, 0, p, 5);
+    } else {
+      const roofH = Math.round((h - 2) * 0.45), wy = 2 + roofH;
+      P.rect(2, wy, w - 4, h - wy - 1, WOOD[0]);
+      for (let x = 3; x < w - 3; x += 3) P.rect(x, wy, 1, h - wy - 1, WOOD[1]); P.rect(2, wy, w - 4, 1, WOOD[2]);
+      for (const x of [1, w - 3]) { P.rect(x, wy - 2, 2, h - wy + 1, BARK[0]); P.px(x - 1, wy - 3, BARK[0]); P.px(x + 2, wy - 4, '#6ab85a'); }
+      leafRoof(P, 0, w, wy + 1, roofH + 1, p.R, p.r, hiC(p.R, 0.2));
+      P.px(cx, 1, p.K); P.px(cx, 0, '#7affd0');
+      roundWin(P, 6, wy + 5, 2, BARK[1], p.G); if (w > 26) roundWin(P, w - 7, wy + 5, 2, BARK[1], p.G);
+      archDoor(P, cx, h - 1, 6, Math.min(10, h - wy - 1), BARK[1], '#4a3018', p.K);
+      for (let i = 0; i < 4; i++) P.px(3 + Math.floor(R0() * (w - 6)), h - 2, ['#e8a0c0', '#f2e27a', '#ffffff'][i % 3]);
+    }
+    for (let x = 0; x < w; x++) P.px(x, h - 1, x % 3 ? '#4f6b3a' : '#3a5a2a');
+  },
+  castle(P, w, h, p, lvl, seed) {
+    const cx = Math.floor(w / 2), R0 = rng(seed);
+    // великое древо позади дворца
+    P.ell(cx, 16, w / 2 - 2, 15, (x, y, nx, ny) => ny < -0.4 ? hiC(p.R, 0.2) : ny > 0.4 ? p.r : ((x * 3 + y) % 7 === 0 ? p.r : p.R));
+    for (let i = 0; i < 24; i++) P.px(4 + Math.floor(R0() * (w - 8)), 3 + Math.floor(R0() * 24), R0() < 0.6 ? hiC(p.R, 0.35) : '#f2e27a');
+    P.rect(cx - 4, 22, 8, h - 22, BARK[0]); P.rect(cx - 4, 22, 2, h - 22, BARK[2]);
+    // белые стены с арками
+    const wallTop = h - Math.round(h * 0.38);
+    brk(P, 0, wallTop, w, h - wallTop, seed, MARB); P.rect(0, wallTop, w, 1, MARB[2]);
+    for (let x = 3; x < w - 6; x += 9) { P.rect(x, wallTop + 5, 5, 8, '#3a5a4a'); P.ell(x + 2.5, wallTop + 5, 2.5, 2, '#3a5a4a'); P.rect(x + 1, wallTop + 6, 3, 6, p.G); P.px(x + 1, wallTop + 6, '#ffffff'); }
+    for (let x = 0; x < w; x += 2) P.px(x, wallTop - 1, x % 4 ? p.R : hiC(p.R));
+    // шпили с куполами-листьями
+    const spire = (x, sw, top, dh) => { brk(P, x - Math.floor(sw / 2), top, sw, h - top, seed + x, MARB); P.rect(x - Math.floor(sw / 2), top, 1, h - top, MARB[2]); onion(P, x, top + 1, sw / 2 + 2, dh, p.R, p.r, hiC(p.R, 0.25), p.K); P.rect(x - 1, top + 5, 2, 4, p.G); P.px(x - 1, top + 5, '#ffffff'); P.rect(x - Math.floor(sw / 2) - 1, top, sw + 2, 1, p.K); };
+    const sw = Math.round(w * 0.1);
+    spire(cx, Math.round(w * 0.16), Math.round(h * (lvl === 3 ? 0.22 : 0.28)), lvl === 3 ? 18 : 14);
+    spire(sw, sw, Math.round(h * 0.42), 10); spire(w - sw - 1, sw, Math.round(h * 0.42), 10);
+    if (lvl === 3) { spire(cx - Math.round(w * 0.24), sw, Math.round(h * 0.34), 12); spire(cx + Math.round(w * 0.24), sw, Math.round(h * 0.34), 12); }
+    // ворота-арка с лозой
+    const gw = 12, gh = 17;
+    P.rect(cx - gw / 2 - 2, h - gh, gw + 4, gh, MARB[1]); P.ell(cx, h - gh, gw / 2 + 2, 6, MARB[1]);
+    P.rect(cx - gw / 2, h - gh, gw, gh, '#2a3a2a'); P.ell(cx, h - gh, gw / 2, 4.5, '#2a3a2a');
+    P.rect(cx - 1, h - gh - 3, 2, gh + 3, '#1a2a1a'); P.px(cx - 4, h - 8, p.K); P.px(cx + 3, h - 8, p.K);
+    for (let y = h - gh - 4; y < h; y += 2) { P.px(cx - gw / 2 - 2 + (y % 4 ? 0 : 1), y, '#4f8a3a'); P.px(cx + gw / 2 + 1 - (y % 4 ? 0 : 1), y, '#4f8a3a'); }
+    flag(P, cx, 0, p, 6);
+  },
+  forgeRoof(P, fx, fw, roofY, roofH, p) {
+    leafRoof(P, fx - 3, fx + fw + 2, roofY + roofH, roofH + 2, p.R, p.r, hiC(p.R, 0.2));
+    P.rect(fx + 3, roofY - 3, 2, 4, BARK[0]); P.px(fx + 2, roofY - 4, '#6ab85a');
+  },
+  guild(P, w, h, p, lvl) {
+    const cx = Math.floor(w / 2), tw = Math.round(w * 0.4), tx = cx - Math.floor(tw / 2), ttop = Math.round(h * (lvl === 2 ? 0.3 : 0.36));
+    brk(P, tx, ttop, tw, h - ttop, 21, MARB); P.rect(tx, ttop, 1, h - ttop, MARB[2]); P.rect(tx + tw - 1, ttop, 1, h - ttop, MARB[1]);
+    for (let y = ttop; y < h; y += 3) { P.px(tx - 1, y, '#4f8a3a'); if (y % 6 === 0) P.px(tx - 2, y + 1, '#6ab85a'); }
+    P.rect(tx - 2, ttop - 1, tw + 4, 2, p.K);
+    onion(P, cx, ttop - 1, tw / 2 + 4, Math.round(h * 0.18), p.R, p.r, hiC(p.R, 0.25), p.K);
+    roundWin(P, cx, ttop + 7, 3, MARB[1], p.G);
+    if (lvl === 2) roundWin(P, cx, ttop + 19, 2, MARB[1], p.G);
+    // парящие кристаллы
+    const cy = Math.round(h * 0.06);
+    for (const [x, y] of [[cx - 9, cy + 10], [cx + 9, cy + 6]].concat(lvl === 2 ? [[cx - 11, cy + 22]] : [])) { P.poly([[x, y - 3], [x + 2, y], [x, y + 3], [x - 2, y]], p.G); P.px(x - 1, y - 1, '#ffffff'); }
+    archDoor(P, cx, h - 1, 6, 10, MARB[1], '#2a4a3a', p.K);
+    P.rect(tx - 3, h - 3, tw + 6, 3, MARB[1]);
+  },
+  bank(P, w, h, p) {
+    const cx = Math.floor(w / 2);
+    P.ell(cx, h - 1, w / 2 - 2, h - 2, (x, y, nx, ny) => Math.abs(nx) > 0.85 ? BARK[1] : (x % 4 === 0 ? BARK[1] : (nx < -0.3 ? BARK[2] : BARK[0])));
+    P.rect(4, 2, w - 8, 3, BARK[1]); P.ell(cx, 4, w / 2 - 6, 3, '#3a2614');
+    for (const x of [6, 14, w - 15, w - 7]) { P.line(x, 1, x - 2, -2, '#6ab85a'); P.px(x + 1, 0, '#4f8a3a'); }
+    const r = 9, vy = h - 10;
+    P.ell(cx, vy, r + 1, r + 1, MARB[1]); P.ell(cx, vy, r, r, '#c8ccd8'); P.ell(cx, vy, r - 2, r - 2, '#a8b0c0');
+    for (let a = 0; a < 6; a++) P.line(cx, vy, cx + Math.cos(a * 1.05) * 6, vy + Math.sin(a * 1.05) * 6, '#e8ecf4');
+    P.ell(cx, vy, 2.5, 2.5, p.G); P.px(cx - 1, vy - 1, '#ffffff');
+    for (const x of [5, w - 6]) { P.rect(x, h - 14, 1, 4, BARK[1]); P.rect(x - 1, h - 10, 3, 3, p.G); P.px(x, h - 9, '#ffffff'); }
+    P.rect(0, h - 1, w, 1, '#4f6b3a');
+  },
+  outpost(P, w, h, p) {
+    for (let i = 0; i < 5; i++) { const x = 2 + i * 10.5; P.line(x, h, x + 4, 4, BARK[0], 2); P.line(x + 9, h, x + 5, 4, BARK[0], 2); P.ell(x + 4.5, 5, 5, 4, (xx, yy, nx, ny) => ny < -0.3 ? hiC(p.R, 0.2) : p.R); P.px(x + 4, 3, '#e8a0c0'); }
+    for (const x of [8, 19, 29, 40]) { P.px(x, h - 6, '#ffd060'); P.px(x + 2, h - 6, '#ffd060'); }
+    P.rect(0, h - 3, w, 3, '#4f6b3a'); for (let x = 0; x < w; x += 3) P.px(x, h - 4, '#6ab85a');
+    flag(P, Math.floor(w / 2), 0, p, 4);
+  },
+  tower(P, w, h, p, lvl) {
+    const cx = Math.floor(w / 2);
+    if (lvl === 1) {
+      P.rect(cx - 2, 10, 4, h - 10, BARK[0]); P.rect(cx - 2, 10, 1, h - 10, BARK[2]); P.line(cx - 2, h - 1, cx - 5, h - 1, BARK[0]); P.line(cx + 1, h - 1, cx + 4, h - 1, BARK[0]);
+      const py = Math.round(h * 0.3); P.rect(0, py, w, 2, WOOD[1]); P.rect(0, py, w, 1, WOOD[2]); P.rect(0, py - 5, 1, 5, WOOD[1]); P.rect(w - 1, py - 5, 1, 5, WOOD[1]); P.rect(0, py - 5, w, 1, WOOD[1]);
+      P.ell(cx, py - 9, w / 2 + 1, 6, (x, y, nx, ny) => ny < -0.3 ? hiC(p.R, 0.2) : ny > 0.4 ? p.r : p.R);
+      P.rect(cx + 2, py + 3, 1, 3, BARK[1]); P.rect(cx + 1, py + 6, 3, 3, p.G); P.px(cx + 2, py + 7, '#ffffff');
+      flag(P, cx, 0, p, 3);
+    } else {
+      const top = Math.round(h * 0.28);
+      brk(P, 2, top, w - 4, h - top, 81, MARB); P.rect(2, top, 1, h - top, MARB[2]);
+      P.rect(1, top - 1, w - 2, 2, p.K); onion(P, cx, top - 1, w / 2 + 1, Math.round(h * 0.2), p.R, p.r, hiC(p.R, 0.25), p.K);
+      for (let y = top + 5; y < h - 8; y += 10) { P.rect(cx - 1, y, 2, 4, '#2a4a3a'); P.px(cx - 1, y + 1, p.G); }
+      for (let y = top + 2; y < h; y += 2) P.px(w - 3 + (y % 4 ? 0 : 1), y, '#4f8a3a');
+      archDoor(P, cx, h - 1, 4, 7, MARB[1], '#2a4a3a');
+    }
+  },
+  uniqhome(P, w, h, p) {
+    for (const [x, hh] of [[9, h], [w - 10, h - 4]]) { P.rect(x - 2, h - hh + 8, 4, hh - 8, BARK[0]); P.rect(x - 2, h - hh + 8, 1, hh - 8, BARK[2]); P.ell(x, h - hh + 7, 9, 7, (xx, y, nx, ny) => ny < -0.3 ? hiC(p.R, 0.2) : ny > 0.4 ? p.r : p.R); }
+    P.rect(8, 14, w - 16, 2, WOOD[1]); P.rect(8, 14, w - 16, 1, WOOD[2]);
+    P.ell(w / 2, 12, 8, 3, '#c8a868'); P.ell(w / 2, 11, 6, 2, '#a08048'); P.px(w / 2 - 3, 9, '#ffffff'); P.px(w / 2 + 2, 9, '#ffffff'); P.px(w / 2, 8, '#e8f0ff');
+    for (let y = 16; y < h; y += 4) P.line(9, y, w - 10, y, WOOD[1]);
+    for (const [x, y] of [[14, h - 4], [30, h - 2], [36, h - 6]]) { P.px(x, y, '#ffffff'); P.px(x + 1, y - 1, '#e8f0ff'); }
+    flag(P, Math.floor(w / 2), 0, p, 3);
+  },
+  annex(P, x0, w, h, p) {
+    const mx = x0 + (w - x0) / 2;
+    P.rect(mx - 1, h - 14, 2, 14, BARK[0]); P.ell(mx, h - 16, 6, 5, (x, y, nx, ny) => ny < -0.3 ? hiC(p.R, 0.2) : p.R);
+    P.ell(mx, h - 7, 4, 4, '#e8dcc0'); P.ell(mx, h - 7, 2.6, 2.6, p.C); P.px(mx, h - 7, p.K); P.line(mx + 1, h - 7, mx + 6, h - 10, '#c8b48a');
+  },
+  wall(P, w, h, p, lvl) {
+    if (lvl === 1) {
+      for (let x = 1; x < w; x += 3) { P.rect(x, 4, 2, h - 4, BARK[0]); P.px(x, 3, '#6ab85a'); P.px(x + 1, 2, '#4f8a3a'); }
+      for (let y = 7; y < h - 1; y += 4) for (let x = 0; x < w; x++) P.px(x, y + ((x >> 1) % 2), (x + y) % 3 ? WOOD[0] : WOOD[1]);
+      for (const [x, y] of [[2, 6], [9, 12], [5, 18], [11, 20]]) { P.px(x, y, '#4f8a3a'); P.px(x + 1, y, '#6ab85a'); }
+    } else {
+      const top = lvl === 3 ? 10 : 4;
+      brk(P, 0, top, w, h - top, 41 + lvl, MARB); P.rect(0, top, w, 1, MARB[2]);
+      for (let x = 0; x < w; x += 4) { P.ell(x + 1.5, top - 1, 1.6, 2, MARB[0]); }
+      P.rect(4, top + 5, w - 8, 9, p.C); P.ell(w / 2, top + 14, (w - 8) / 2, 2, p.C); P.px(w / 2 - 1, top + 8, p.K); P.px(w / 2, top + 9, p.K);
+      for (let y = top + 2; y < h; y += 2) P.px(1 + (y % 4 ? 0 : 1), y, '#4f8a3a');
+      if (lvl === 3) { roundWin(P, Math.floor(w / 2), top + 20, 1, MARB[1], p.G); flag(P, w - 2, 0, p, 1); }
+    }
+  },
+  cwall(P, w, h, p, lvl) {
+    if (lvl === 1) { for (let x = 1; x < w; x += 3) { P.rect(x, 3, 2, h - 3, BARK[0]); P.px(x, 2, '#6ab85a'); } for (let y = 6; y < h; y += 4) P.rect(0, y, w, 1, WOOD[0]); }
+    else { brk(P, 0, 5, w, h - 5, 91, MARB); for (let x = 0; x < w; x += 4) P.ell(x + 1.5, 4, 1.6, 2, MARB[0]); P.rect(w / 2 - 1, 10, 2, 5, '#2a4a3a'); for (let y = 6; y < h; y += 3) P.px(2, y, '#4f8a3a'); }
+  },
+};
+
+// ---------------------------------------------------------------- НЕЖИТЬ
+const UDB = {
+  shelter(P, w, h, p, big, seed) {
+    const cx = Math.floor(w / 2);
+    const top = big ? 6 : 2, pedH = big ? 10 : Math.round((h - top) * 0.32), bodyTop = top + pedH;
+    // фронтон склепа
+    for (let y = 0; y < pedH; y++) { const hw = Math.round((y + 1) / pedH * (w / 2 - 1)); P.rect(cx - hw, top + y, hw * 2, 1, y === pedH - 1 ? GOTH[1] : (y % 3 === 0 ? GOTH[2] : GOTH[0])); }
+    P.line(cx, top, 1, bodyTop - 1, GOTH[2]); P.ell(cx, top + pedH * 0.6, 2, 2, '#ddd5bd'); P.px(cx - 1, top + Math.round(pedH * 0.6), INK); P.px(cx + 1, top + Math.round(pedH * 0.6), INK);
+    P.rect(cx - 1, top - 4, 1, 4, '#6a6670'); P.rect(cx - 2, top - 3, 3, 1, '#6a6670');
+    brk(P, 2, bodyTop, w - 4, h - bodyTop - 1, seed, GOTH); P.rect(1, bodyTop, w - 2, 1, GOTH[2]);
+    // колонны
+    const cols = big ? [3, 10, w - 13, w - 6] : [3, w - 6];
+    for (const x of cols) { P.rect(x, bodyTop + 1, 3, h - bodyTop - 3, GOTH[2]); P.rect(x + 2, bodyTop + 1, 1, h - bodyTop - 3, GOTH[1]); P.rect(x - 1, h - 3, 5, 2, GOTH[1]); }
+    // окна с зелёным светом и решётками
+    const wy = bodyTop + 4;
+    for (const x of big ? [15, w - 18] : (w > 26 ? [8, w - 11] : [])) { P.rect(x, wy, 3, 6, '#141018'); P.ell(x + 1.5, wy, 1.5, 1.5, '#141018'); P.rect(x, wy + 1, 3, 5, GLOWU); P.px(x + 1, wy + 1, '#d0ffe0'); P.rect(x + 1, wy, 1, 6, GOTH[1]); }
+    // железная дверь
+    const dw = big ? 9 : 6, dh = big ? 14 : 10;
+    P.rect(cx - dw / 2 - 1, h - dh - 2, dw + 2, dh + 1, GOTH[1]); P.ell(cx, h - dh - 1, dw / 2 + 1, 3, GOTH[1]);
+    P.rect(cx - dw / 2, h - dh - 1, dw, dh, '#3a3a42'); P.ell(cx, h - dh - 1, dw / 2, 2, '#3a3a42');
+    for (let x = cx - dw / 2 + 1; x < cx + dw / 2; x += 2) P.rect(x, h - dh - 1, 1, dh, '#26262c'); P.px(cx + 1, h - Math.floor(dh / 2) - 1, GLOWU);
+    if (big) {
+      for (const x of [0, w - 3]) { P.poly([[x, h - 1], [x + 1, h - 22], [x + 2, h - 22], [x + 3, h - 1]], GOTH[2]); P.px(x + 1, h - 24, GLOWU); P.px(x + 2, h - 25, '#d0ffe0'); P.px(x + 1, h - 23, GLOWU); }
+      flag(P, cx, 0, p, 6);
+    }
+    for (let x = 0; x < w; x++) P.px(x, h - 1, x % 3 ? '#3a3a32' : '#2a2a24');
+  },
+  castle(P, w, h, p, lvl, seed) {
+    const cx = Math.floor(w / 2);
+    const wallTop = h - Math.round(h * 0.4);
+    // острые готические шпили
+    const spire = (x, sw, top, rh) => { brk(P, x - Math.floor(sw / 2), top, sw, h - top, seed + x, GOTH); P.rect(x - Math.floor(sw / 2), top, 1, h - top, GOTH[2]); coneRoof(P, x, top + 1, sw / 2 + 1.5, rh, p.R, p.r, hiC(p.R, 0.15)); P.rect(x - 1, top + 5, 2, 5, GLOWU); P.px(x - 1, top + 5, '#d0ffe0'); P.ell(x - 0.5, top + 5, 1, 1, GLOWU); P.rect(x - Math.floor(sw / 2) - 1, top, sw + 2, 1, GOTH[1]); P.px(x - 0.5, top - rh - 1, '#6a6670'); };
+    const sw = Math.round(w * 0.12);
+    spire(sw - 1, sw, Math.round(h * 0.34), sw + 6); spire(w - sw, sw, Math.round(h * 0.34), sw + 6);
+    if (lvl === 3) { spire(cx - Math.round(w * 0.24), sw, Math.round(h * 0.26), sw + 8); spire(cx + Math.round(w * 0.24), sw, Math.round(h * 0.26), sw + 8); }
+    const kw = Math.round(w * 0.3), kTop = Math.round(h * (lvl === 3 ? 0.24 : 0.3));
+    brk(P, cx - Math.floor(kw / 2), kTop, kw, h - kTop, seed + 3, GOTH);
+    coneRoof(P, cx, kTop + 1, kw / 2 + 2, lvl === 3 ? 18 : 14, p.R, p.r, hiC(p.R, 0.15));
+    for (const x of [cx - 6, cx + 4]) { P.rect(x, kTop + 6, 3, 7, '#141018'); P.ell(x + 1.5, kTop + 6, 1.5, 2, '#141018'); P.rect(x, kTop + 7, 3, 6, GLOWU); P.px(x, kTop + 7, '#d0ffe0'); }
+    P.ell(cx, kTop + 4, 2.5, 2.5, GLOWU); P.ell(cx, kTop + 4, 1.4, 1.4, '#d0ffe0');
+    brk(P, 0, wallTop, w, h - wallTop, seed, GOTH); P.rect(0, wallTop, w, 1, GOTH[2]);
+    for (let x = 0; x < w - 1; x += 4) { P.rect(x, wallTop - 3, 2, 3, GOTH[0]); P.px(x, wallTop - 4, GOTH[2]); }
+    for (let x = 6; x < w - 6; x += 11) if (Math.abs(x - cx) > 10) { P.rect(x, wallTop + 4, 6, 4, '#ddd5bd'); P.px(x + 1, wallTop + 5, INK); P.px(x + 4, wallTop + 5, INK); P.rect(x + 1, wallTop + 7, 4, 1, '#bdb49c'); }
+    P.rect(cx - 3, kTop + 16, 6, 9, p.C); P.px(cx - 3, kTop + 25, p.C); P.px(cx + 2, kTop + 25, p.C); P.px(cx - 1, kTop + 18, p.K); P.px(cx, kTop + 19, p.K);
+    // ворота-пасть черепа
+    const gw = 12, gh = 15;
+    P.rect(cx - gw / 2 - 2, h - gh - 2, gw + 4, gh + 2, '#ddd5bd'); P.ell(cx, h - gh - 2, gw / 2 + 2, 5, '#ddd5bd');
+    P.rect(cx - gw / 2, h - gh, gw, gh, '#0e0a12'); P.ell(cx, h - gh, gw / 2, 3.5, '#0e0a12');
+    for (let x = cx - gw / 2; x < cx + gw / 2; x += 2) { P.px(x, h - gh, '#ddd5bd'); P.px(x + 1, h - gh + 1, '#ddd5bd'); }
+    P.rect(cx - 4, h - gh - 6, 3, 3, '#0e0a12'); P.rect(cx + 1, h - gh - 6, 3, 3, '#0e0a12'); P.px(cx - 3, h - gh - 5, GLOWU); P.px(cx + 2, h - gh - 5, GLOWU);
+    for (let x = cx - gw / 2 + 1; x < cx + gw / 2; x += 2) P.rect(x, h - gh + 2, 1, gh - 4, '#3a3a42');
+    flag(P, cx, 0, p, 6);
+  },
+  forgeRoof(P, fx, fw, roofY, roofH, p) {
+    P.rect(fx - 2, roofY + roofH - 2, fw + 4, 2, '#3a3030');
+    for (let x = fx - 1; x < fx + fw + 1; x += 3) { P.line(x, roofY + roofH - 1, x + 1, roofY + 1, '#ddd5bd'); P.px(x + 1, roofY, '#bdb49c'); }
+    P.line(fx - 2, roofY + 2, fx + fw + 2, roofY + 2, '#bdb49c'); P.rect(fx + fw / 2 - 2, roofY - 3, 4, 3, '#ddd5bd'); P.px(fx + fw / 2 - 1, roofY - 2, INK); P.px(fx + fw / 2 + 1, roofY - 2, INK);
+  },
+  guild(P, w, h, p, lvl) {
+    const cx = Math.floor(w / 2), tw = Math.round(w * 0.5), tx = cx - Math.floor(tw / 2), ttop = Math.round(h * (lvl === 2 ? 0.28 : 0.34));
+    brk(P, tx, ttop, tw, h - ttop, 21, GOTH); P.rect(tx, ttop, 1, h - ttop, GOTH[2]);
+    for (let y = ttop + 4; y < h - 4; y += 12) { P.poly([[tx - 3, y + 4], [tx, y], [tx, y + 4]], GOTH[1]); P.poly([[tx + tw + 3, y + 4], [tx + tw, y], [tx + tw, y + 4]], GOTH[1]); }
+    coneRoof(P, cx, ttop + 1, tw / 2 + 3, Math.round(h * 0.2), p.R, p.r, hiC(p.R, 0.15));
+    const sy = ttop - Math.round(h * 0.2) - 6;
+    P.ell(cx, sy + 2, 3.5, 3.2, '#ddd5bd'); P.rect(cx - 2, sy + 1, 2, 2, INK); P.rect(cx + 1, sy + 1, 2, 2, INK); P.px(cx - 1, sy + 2, GLOWU); P.px(cx + 1, sy + 2, GLOWU); P.rect(cx - 1, sy + 5, 3, 1, '#bdb49c');
+    P.ell(cx, sy - 3, 2, 2, GLOWU); P.px(cx, sy - 4, '#d0ffe0');
+    for (const y of [ttop + 6, ttop + 18].concat(lvl === 2 ? [ttop + 30] : [])) { P.rect(cx - 1, y, 3, 6, '#141018'); P.ell(cx + 0.5, y, 1.5, 1.5, '#141018'); P.rect(cx - 1, y + 1, 3, 5, GLOWU); P.px(cx - 1, y + 1, '#d0ffe0'); }
+    P.rect(cx - 3, h - 9, 6, 9, GOTH[1]); P.rect(cx - 2, h - 8, 4, 8, '#0e0a12'); P.px(cx + 1, h - 4, GLOWU);
+    grave(P, 1, h); cross(P, w - 5, h);
+  },
+  bank(P, w, h, p) {
+    const cx = Math.floor(w / 2);
+    for (let y = 0; y < 8; y++) { const hw = Math.round((y + 1) / 8 * (w / 2)); P.rect(cx - hw, y, hw * 2, 1, y === 7 ? GOTH[1] : GOTH[0]); }
+    P.ell(cx, 5, 2, 2, '#ddd5bd'); P.px(cx - 1, 5, INK); P.px(cx + 1, 5, INK);
+    brk(P, 2, 8, w - 4, h - 10, 31, GOTH);
+    for (const x of [3, w - 7]) { P.rect(x, 8, 4, h - 10, GOTH[2]); P.rect(x + 3, 8, 1, h - 10, GOTH[1]); }
+    // саркофаг с золотом
+    P.rect(cx - 10, h - 11, 20, 9, '#5a5664'); P.rect(cx - 10, h - 11, 20, 1, '#7a7684'); P.rect(cx - 11, h - 13, 22, 2, '#6a6674');
+    P.rect(cx - 3, h - 9, 6, 5, '#ddd5bd'); P.px(cx - 2, h - 8, INK); P.px(cx + 1, h - 8, INK);
+    for (let i = 0; i < 10; i++) P.px(cx - 9 + i * 2, h - 14 - (i % 3 ? 0 : 1), i % 2 ? p.K : '#f2c14e');
+    P.rect(cx + 6, h - 16, 4, 3, '#f2c14e'); P.px(cx + 6, h - 16, '#fff1b0');
+    P.rect(0, h - 2, w, 2, GOTH[1]);
+  },
+  outpost(P, w, h, p) {
+    for (let x = 0; x < w; x += 3) { P.rect(x, 6, 1, h - 6, '#2a2a30'); P.px(x, 5, '#4a4a52'); P.px(x, 4, '#6a6a72'); }
+    P.rect(0, 8, w, 1, '#3a3a42'); P.rect(0, h - 6, w, 1, '#3a3a42');
+    for (const [x, t] of [[5, 0], [14, 1], [24, 0], [33, 1], [41, 0]]) { if (t) cross(P, x, h - 1); else grave(P, x, h - 1); }
+    for (const x of [10, 29]) { P.rect(x, h - 3, 6, 2, '#1a1418'); P.px(x + 2, h - 3, GLOWU); P.px(x + 4, h - 3, GLOWU); }
+    flag(P, Math.floor(w / 2), 0, p, 4);
+  },
+  tower(P, w, h, p, lvl) {
+    const cx = Math.floor(w / 2);
+    if (lvl === 1) {
+      const top = Math.round(h * 0.3);
+      P.rect(1, top, 2, h - top, '#3a3030'); P.rect(w - 3, top, 2, h - top, '#3a3030');
+      for (let y = top + 3; y < h - 2; y += 6) { P.line(2, y, w - 3, y + 5, '#4a4040'); P.line(w - 3, y, 2, y + 5, '#4a4040'); }
+      P.rect(0, top - 5, w, 5, '#4a4040'); P.rect(0, top - 5, w, 1, '#5a5050'); for (let x = 0; x < w; x += 3) P.px(x, top - 6, '#ddd5bd');
+      P.rect(cx - 2, top - 10, 4, 4, '#ddd5bd'); P.px(cx - 1, top - 9, INK); P.px(cx + 1, top - 9, INK); P.px(cx - 1, top - 9, GLOWU);
+      P.rect(w - 2, top - 2, 1, 4, '#2a2a30'); P.rect(w - 3, top + 2, 3, 3, GLOWU);
+      flag(P, 1, 0, p, 3);
+    } else {
+      const top = Math.round(h * 0.3);
+      brk(P, 1, top, w - 2, h - top, 81, GOTH); P.rect(1, top, 1, h - top, GOTH[2]);
+      coneRoof(P, cx, top + 1, w / 2 + 1, Math.round(h * 0.26), p.R, p.r, hiC(p.R, 0.15));
+      for (let y = top + 5; y < h - 8; y += 9) { P.rect(cx - 1, y, 2, 5, '#141018'); P.rect(cx - 1, y + 1, 2, 4, GLOWU); }
+      P.rect(cx - 3, h - 8, 6, 8, GOTH[1]); P.rect(cx - 2, h - 7, 4, 7, '#0e0a12');
+      P.px(cx - 0.5, top - Math.round(h * 0.26) - 1, '#6a6670');
+    }
+  },
+  uniqhome(P, w, h, p) {
+    brk(P, 4, 13, w - 8, h - 13, 33, GOTH);
+    for (let y = 0; y < 10; y++) { const hw = Math.round((y + 1) / 10 * (w / 2 - 2)); P.rect(w / 2 - hw, 3 + y, hw * 2, 1, y % 3 ? p.R : p.r); }
+    P.rect(w / 2 - 8, 17, 16, h - 17, '#0e0a12'); P.ell(w / 2, 17, 8, 4, '#0e0a12');
+    P.px(w / 2 - 3, 24, GLOWU); P.px(w / 2 + 2, 24, GLOWU);
+    for (let i = 0; i < 6; i++) P.px(w / 2 - 7 + i * 3, h - 2 - (i % 2), 'rgba(122,255,160,0.5)');
+    for (const x of [1, w - 5]) grave(P, x, h);
+    P.rect(w / 2 - 3, 9, 6, 5, '#ddd5bd'); P.px(w / 2 - 2, 10, INK); P.px(w / 2 + 1, 10, INK);
+    flag(P, Math.floor(w / 2), 0, p, 3);
+  },
+  annex(P, x0, w, h, p) {
+    const mx = x0 + Math.floor((w - x0) / 2);
+    P.rect(mx - 1, h - 22, 2, 22, '#3a3030'); P.rect(mx - 1, h - 22, 8, 2, '#3a3030'); P.line(mx + 5, h - 20, mx + 5, h - 14, '#8a7a5a');
+    P.rect(mx + 4, h - 14, 3, 3, '#ddd5bd'); P.px(mx + 4, h - 13, INK); P.px(mx + 6, h - 13, INK);
+    for (let i = 0; i < 6; i++) P.rect(x0 + 1 + i * 3, h - 2 - (i % 2), 3, 1, '#ddd5bd');
+  },
+  wall(P, w, h, p, lvl) {
+    if (lvl === 1) {
+      for (let x = 1; x < w; x += 3) { P.rect(x, 3, 1, h - 3, '#2a2a30'); P.px(x, 2, '#6a6a72'); P.px(x, 1, '#8a8a92'); }
+      P.rect(0, 8, w, 1, '#3a3a42'); P.rect(0, 17, w, 1, '#3a3a42');
+      for (const y of [11, 20]) for (let x = 0; x < w; x += 4) { P.rect(x, y, 3, 1, '#ddd5bd'); P.px(x, y - 1, '#ddd5bd'); P.px(x + 2, y + 1, '#ddd5bd'); }
+      P.rect(5, 12, 4, 4, '#ddd5bd'); P.px(6, 13, INK); P.px(8, 13, INK);
+    } else {
+      const top = lvl === 3 ? 10 : 4;
+      brk(P, 0, top, w, h - top, 41 + lvl, GOTH); P.rect(0, top, w, 1, GOTH[2]);
+      for (let x = 0; x < w; x += 3) { P.rect(x, top - 3, 1, 3, '#4a4a52'); P.px(x, top - 4, '#8a8a92'); }
+      P.rect(4, top + 5, w - 8, 9, p.C); P.px(4, top + 14, p.C); P.px(w - 5, top + 14, p.C); P.rect(Math.floor(w / 2) - 1, top + 8, 2, 2, p.K);
+      P.rect(Math.floor(w / 2) - 2, top + 1, 4, 3, '#ddd5bd'); P.px(Math.floor(w / 2) - 1, top + 2, INK); P.px(Math.floor(w / 2) + 1, top + 2, INK);
+      if (lvl === 3) { P.rect(Math.floor(w / 2) - 1, top + 18, 2, 4, GLOWU); flag(P, w - 2, 0, p, 1); }
+    }
+  },
+  cwall(P, w, h, p, lvl) {
+    if (lvl === 1) { for (let x = 1; x < w; x += 3) { P.rect(x, 3, 1, h - 3, '#2a2a30'); P.px(x, 2, '#8a8a92'); } P.rect(0, 7, w, 1, '#3a3a42'); P.rect(0, h - 6, w, 1, '#3a3a42'); }
+    else { brk(P, 0, 5, w, h - 5, 91, GOTH); for (let x = 0; x < w; x += 3) { P.rect(x, 2, 1, 3, '#4a4a52'); P.px(x, 1, '#8a8a92'); } P.rect(w / 2 - 1, 11, 2, 5, GLOWU); }
+  },
+};
+RSTY.dwarf && Object.assign(RSTY.dwarf, { B: DWB }); RSTY.elf && Object.assign(RSTY.elf, { B: ELB }); RSTY.undead && Object.assign(RSTY.undead, { B: UDB });
+
+// ---------------------------------------------------------------- ПОДКЛЮЧЕНИЕ
+// Общие функции рисования переадресуют новые стили на собственные модели народа.
+{
+  const R = st => RSTY[st];
+  const wrapAt = (fn, idx, alt) => function (...a) { const r = R(a[idx]); return r ? alt(r, ...a) : fn.apply(this, a); };
+  drawMonarch = wrapAt(drawMonarch, 2, (r, P, p, st, f) => r.mon(P, p, f));
+  drawMelee = wrapAt(drawMelee, 2, (r, P, p, st, f) => r.mel(P, p, f));
+  drawRanged = wrapAt(drawRanged, 2, (r, P, p, st, f) => r.rng(P, p, f));
+  drawMage = wrapAt(drawMage, 2, (r, P, p, st, f) => r.mag(P, p, f));
+  drawBeast = wrapAt(drawBeast, 2, (r, P, p, st, f) => r.bst(P, p, f));
+  drawBuilder = wrapAt(drawBuilder, 2, (r, P, p, st, fr) => r.bld(P, p, fr));
+  drawUniq = wrapAt(drawUniq, 2, (r, P, p, st, f) => r.unq(P, p, f));
+  drawVillager = wrapAt(drawVillager, 4, (r, P, f, v, p) => r.vil(P, f, v, p));
+  drawTax = wrapAt(drawTax, 3, (r, P, f, p) => r.tax(P, f, p));
+  const cat0 = drawCatapult; drawCatapult = function (P, p, f) { const r = RSTY[p.look]; return r ? r.cat(P, p, f) : cat0(P, p, f); };
+  paintShelter = wrapAt(paintShelter, 4, (r, P, w, h, p, st, big, seed) => r.B.shelter(P, w, h, p, big, seed));
+  paintCastle = wrapAt(paintCastle, 4, (r, P, w, h, p, st, lvl, seed) => r.B.castle(P, w, h, p, lvl, seed));
+  paintGuild = wrapAt(paintGuild, 4, (r, P, w, h, p, st, lvl) => r.B.guild(P, w, h, p, lvl));
+  paintBank = wrapAt(paintBank, 4, (r, P, w, h, p) => r.B.bank(P, w, h, p));
+  paintOutpost = wrapAt(paintOutpost, 4, (r, P, w, h, p) => r.B.outpost(P, w, h, p));
+  paintTower = wrapAt(paintTower, 4, (r, P, w, h, p, st, lvl) => r.B.tower(P, w, h, p, lvl));
+  paintUniqHome = wrapAt(paintUniqHome, 4, (r, P, w, h, p) => r.B.uniqhome(P, w, h, p));
+  const dw0 = paintDwell; paintDwell = function (P, w, h, p, st, lvl) {
+    const r = R(st); if (!r || lvl === 2) return dw0(P, w, h, p, st, lvl);
+    const sw = Math.round(w * 0.7); paintShelter(P, sw, h, p, st, true, 23); r.B.annex(P, sw + 1, w, h, p);
+  };
+  const wl0 = paintWall; paintWall = function (P, w, h, p, lvl) { const r = RSTY[p.look]; return r ? r.B.wall(P, w, h, p, lvl) : wl0(P, w, h, p, lvl); };
+  const cw0 = paintCityWall; paintCityWall = function (P, w, h, p, lvl) { const r = RSTY[p.look]; return r ? r.B.cwall(P, w, h, p, lvl) : cw0(P, w, h, p, lvl); };
+  // костяной дракон: рёбра и рваные крылья
+  const dr0 = drawDragon; drawDragon = function (P, Q, f) {
+    dr0(P, Q, f); if (!Q.bones) return;
+    for (let x = 13; x < 27; x += 2) P.line(x, 14, x - 1, 22, Q.b);
+    P.line(12, 15, 28, 15, '#e8e0c8');
+    const up = [0, 5, 10][f]; for (const [x, y] of [[16, 8], [22, 6], [26, 10]]) P.clear(x, y + up * 0.6, 2, 2);
+  };
+}
+
 // ================== ПИКСЕЛЬ-АРТ: ПРИРОДА ПО СЕЗОНАМ ==================
 // Каждый сезонный предмет рисуется в четырёх вариантах: ключ@0 весна … ключ@3 зима.
 const LEAF = {
@@ -2186,6 +3233,151 @@ function buildNatureTextures(scene) {
   }
 }
 
+// ================== БИОМЫ: ЛЕСНОЙ КРАЙ, СТЕПЬ, СЕВЕРНЫЕ ГОРЫ ==================
+// Биом выбирается случайно в каждой партии: меняет землю, растительность, горы на фоне и бедствие.
+const BIOMES = {
+  forest: { name: 'Лесной край', hazard: 'вулкан и метеориты' },
+  steppe: { name: 'Степь', hazard: 'пыльные бури и смерчи' },
+  north:  { name: 'Северные горы', hazard: 'грозы с молниями' },
+};
+const GRASS_B = {
+  steppe: [
+    { top: '#9aa858', top2: '#86924a', mid: '#a08a52', dirt: '#8a6a44', dirt2: '#a07c50', fl: ['#e8d070', '#d07a50', '#ffffff'] },
+    { top: '#c4b060', top2: '#aa9650', mid: '#a88a50', dirt: '#8a6a44', dirt2: '#a07c50', fl: ['#e8c058'] },
+    { top: '#b88a4a', top2: '#9c743c', mid: '#8a6438', dirt: '#7a5a3a', dirt2: '#94704a', fl: ['#c86a2a'] },
+    { top: '#d8d4c8', top2: '#b8b0a0', mid: '#9a8a70', dirt: '#7a5a3a', dirt2: '#94704a', fl: [] },
+  ],
+  north: [
+    { top: '#5a8a4e', top2: '#4a7442', mid: '#3e6038', dirt: '#3a2e26', dirt2: '#4a3c30', fl: ['#b088d0', '#ffffff', '#f2e6a0'] },
+    { top: '#4f7e46', top2: '#41693c', mid: '#355632', dirt: '#3a2e26', dirt2: '#4a3c30', fl: ['#b088d0'] },
+    { top: '#7a7a3e', top2: '#62642f', mid: '#4e5030', dirt: '#3a2e26', dirt2: '#4a3c30', fl: ['#a0502a', '#d8a838'] },
+    { top: SNOW, top2: SNOW2, mid: '#a9bcc4', dirt: '#3a3230', dirt2: '#4a403a', fl: [] },
+  ],
+};
+function paintGround(P, g, seed, s) {
+  const G = rng(seed), gh = BANK - GROUND + 3;
+  P.rect(0, 3, 255, gh - 3, g.dirt); P.rect(0, 3, 255, 9, g.top2);
+  for (let x = 0; x < 255; x += 3) {
+    if (G() < 0.5) P.rect(x, 0, 3, 3, g.top);
+    P.rect(x, 3, 3, 3, G() < 0.5 ? g.top : g.top2);
+    if (G() < 0.35) P.rect(x, 9, 3, 3, g.mid);
+    if (G() < 0.15) P.rect(x, 12 + Math.floor(G() * 3) * 3, 3, 3, g.dirt2);
+    if (G() < 0.1) P.rect(x, gh - 3, 6, 3, STONE);
+    if (g.fl.length && G() < 0.05) P.rect(x, 3, 3, 3, g.fl[Math.floor(G() * g.fl.length)]);
+  }
+  if (s === 3) for (let x = 0; x < 255; x += 3) if (G() < 0.3) P.rect(x, 12, 3, 3, SNOW3);
+}
+
+// ---------- степь ----------
+const CACT = [{ g: '#5a8a4a', G: '#78a860', d: '#3e6434' }, { g: '#5e8a46', G: '#7aa65a', d: '#406432' }, { g: '#6e8048', G: '#8a9a5a', d: '#4e5c34' }, { g: '#5a7454', G: '#74906a', d: '#3e5440' }];
+function paintCactus(P, w, h, s, kind) {
+  const c = CACT[s], cx = Math.floor(w / 2);
+  const col = (x, y0, y1, wd) => { for (let y = y0; y < y1; y++) for (let i = 0; i < wd; i++) P.px(x + i, y, i === 0 ? c.G : i === wd - 1 ? c.d : (y % 3 === 0 ? c.d : c.g)); P.rect(x + 1, y0 - 1, wd - 2, 1, c.g); };
+  if (kind === 0) { // сагуаро с двумя руками
+    col(cx - 2, 4, h, 5);
+    col(cx - 8, h * 0.35, h * 0.62, 4); P.rect(cx - 8, h * 0.62, 7, 3, c.g); P.rect(cx - 8, h * 0.62 + 2, 7, 1, c.d);
+    col(cx + 4, h * 0.25, h * 0.52, 4); P.rect(cx + 2, h * 0.52, 6, 3, c.g); P.rect(cx + 2, h * 0.52 + 2, 6, 1, c.d);
+  } else if (kind === 1) { // одна рука
+    col(cx - 2, 3, h, 5); col(cx + 4, h * 0.4, h * 0.68, 4); P.rect(cx + 2, h * 0.68, 6, 3, c.g); P.rect(cx + 2, h * 0.68 + 2, 6, 1, c.d);
+  } else { // бочонок
+    P.ell(cx, h - 5, w / 2 - 1, 5, (x, y, nx) => nx < -0.4 ? c.G : nx > 0.5 ? c.d : (x % 2 ? c.g : c.d));
+  }
+  if (s === 0) { P.px(cx, 2, '#f0b8c8'); P.px(cx + 1, 3, '#f0b8c8'); if (kind === 0) P.px(cx + 5, Math.floor(h * 0.25) - 2, '#f2e6a0'); }
+  if (s === 3) { P.rect(cx - 2, 2, 5, 2, SNOW); if (kind === 0) { P.rect(cx - 8, Math.floor(h * 0.35) - 1, 4, 2, SNOW); P.rect(cx + 4, Math.floor(h * 0.25) - 1, 4, 2, SNOW); } }
+  for (let y = 6; y < h - 2; y += 4) { P.px(cx - 3, y, '#e8e0c0'); P.px(cx + 3, y + 2, '#e8e0c0'); }
+}
+function paintCrag(P, w, h, s, seed) {
+  const R0 = rng(seed), r1 = '#b07a52', r2 = '#c8925e', r3 = '#8a5a3c', r4 = '#6e4630';
+  const cols = [[2, 0.55], [8, 0.95], [16, 0.75], [22, 0.5]].map(([x, f]) => [Math.round(x * w / 30), Math.round(h * f)]);
+  for (const [x0, ht] of cols) for (let y = h - ht; y < h; y++) for (let x = x0; x < x0 + Math.round(8 * w / 30); x++) {
+    const band = Math.floor((y - (h - ht)) / 4) % 3;
+    P.px(x, y, x === x0 ? r2 : x === x0 + Math.round(8 * w / 30) - 1 ? r4 : band === 0 ? r2 : band === 1 ? r1 : r3);
+  }
+  for (let i = 0; i < 12; i++) P.px(Math.floor(R0() * w), Math.floor(h * 0.3 + R0() * h * 0.7), r4);
+  if (s === 3) for (const [x0, ht] of cols) P.rect(x0, h - ht, Math.round(8 * w / 30), 2, SNOW);
+  if (s === 0 || s === 1) { P.px(1, h - 1, CACT[s].g); P.px(w - 2, h - 2, CACT[s].g); }
+}
+function paintDryBush(P, s) {
+  const c = ['#8a8a48', '#a08a4a', '#8a6a3a', '#9a8a70'][s], d = ['#6a6a34', '#7a6634', '#6a4a2a', '#7a6a56'][s];
+  for (let i = 0; i < 26; i++) { const a = i * 0.9, r = 3 + (i % 4); P.line(8, 6, 8 + Math.cos(a) * r * 1.6, 6 + Math.sin(a) * r * 0.9, i % 2 ? c : d); }
+  if (s === 3) { P.rect(4, 2, 8, 1, SNOW); }
+}
+function paintSkull(P, s) {
+  P.rect(2, 2, 6, 4, BONE); P.rect(3, 6, 4, 1, BONE); P.px(3, 3, INK); P.px(6, 3, INK); P.px(4, 5, '#c8bda6');
+  P.line(2, 2, 0, 0, BONE); P.line(7, 2, 9, 0, BONE); if (s === 3) P.rect(2, 1, 6, 1, SNOW);
+}
+
+// ---------- север ----------
+const SPRUCE = [{ g: '#1c3a2e', G: '#2a5040', d: '#10261e', t: '#2a1f17' }, { g: '#1a3628', G: '#264a38', d: '#0e2218', t: '#2a1f17' }, { g: '#1e3a2c', G: '#2c4e3a', d: '#12261c', t: '#2a1f17' }, { g: '#1c3a2e', G: '#2a5040', d: '#10261e', t: '#2a1f17' }];
+const SPRUCE_FAR = [{ g: '#2e4a46', G: '#3a5a54', d: '#243c38' }, { g: '#2c4842', G: '#38564e', d: '#223a34' }, { g: '#344a42', G: '#40584e', d: '#2a3e36' }, { g: '#40525a', G: '#4e626a', d: '#36464e' }];
+function paintSpruce(P, w, h, pal, s) {
+  const cx = Math.floor(w / 2);
+  P.rect(cx - 1, h - 7, 2, 7, pal.t || '#2a1f17');
+  const tiers = Math.floor(h / 7);
+  for (let i = 0; i < tiers; i++) {
+    const yb = h - 5 - i * ((h - 8) / tiers), half = Math.max(1, (w / 2 - 1) * (1 - i / tiers) + 1), ht = (h - 8) / tiers + 3;
+    for (let y = 0; y < ht; y++) { const hw = Math.round(half * (y / ht)); for (let x = cx - hw; x <= cx + hw - 1; x++) P.px(x, yb - ht + y, x < cx - hw / 3 ? pal.G : (y > ht - 2 ? pal.d : pal.g)); }
+    if (s === 3) { const hw = Math.round(half * 0.9); P.rect(cx - hw, yb - 2, hw * 2, 1, SNOW); P.px(cx - hw + 1, yb - 3, SNOW2); }
+  }
+  P.px(cx, 0, pal.g); P.px(cx - 1, 1, pal.g); P.px(cx, 1, pal.G);
+  if (s === 3) P.px(cx, 0, SNOW);
+}
+function paintBoulder(P, w, h, s) {
+  const moss = ['#5a8a3a', '#4f7a34', '#7a7036', SNOW][s];
+  P.ell(w / 2, h - h / 2 + 1, w / 2 - 1, h / 2, (x, y, nx, ny) => ny < -0.4 ? (s === 3 ? SNOW : moss) : nx < -0.3 ? STONE2 : nx > 0.5 || ny > 0.6 ? STONE3 : STONE);
+  P.px(w * 0.6, h * 0.55, STONE3); P.px(w * 0.35, h * 0.7, STONE3); P.line(w * 0.3, h * 0.4, w * 0.45, h * 0.6, STONE3);
+}
+function paintRuneStone(P, s) {
+  P.poly([[2, 21], [1, 6], [4, 1], [8, 0], [11, 5], [10, 21]], STONE); P.rect(2, 2, 2, 18, STONE2); P.rect(9, 6, 1, 15, STONE3);
+  const rune = s === 3 ? '#9aa8b0' : '#7a3a2a';
+  P.line(5, 5, 5, 16, rune); P.line(5, 7, 8, 9, rune); P.line(5, 11, 8, 13, rune); P.px(7, 18, rune); P.px(4, 18, rune);
+  P.rect(0, 21, 12, 1, STONE3); if (s === 3) { P.rect(4, 0, 4, 1, SNOW); P.px(3, 1, SNOW); }
+  if (s < 2) { P.px(1, 20, '#5a8a3a'); P.px(10, 19, '#5a8a3a'); }
+}
+function paintHeather(P, s) {
+  if (s === 3) { P.ell(6, 5, 6, 1.5, SNOW); return; }
+  const fl = ['#b088d0', '#9a70c0', '#8a6a4a', SNOW][s], st = s === 2 ? '#6a5a30' : '#4f7038';
+  for (let x = 0; x < 12; x += 2) { P.rect(x, 3, 1, 3, st); P.px(x, 2, fl); P.px(x + 1, 3, fl); }
+}
+
+// ---------- бедствия: смерч и грозовая туча ----------
+function paintTornado(P, f) {
+  const w = 44, h = 96;
+  for (let y = 0; y < h; y++) {
+    const t = y / h, hw = 3 + (1 - t) * 17 + Math.sin(y / 5 + f * 2) * 2, cx = w / 2 + Math.sin(y / 9 + f * 1.3) * (4 + t * 3);
+    for (let x = Math.round(cx - hw); x <= Math.round(cx + hw); x++) {
+      const band = (Math.floor((x - cx + y * 0.7 + f * 3) / 3) % 3 + 3) % 3;
+      P.px(x, y, band === 0 ? '#8a7a64' : band === 1 ? '#a8987e' : '#6e604e');
+    }
+  }
+  for (let i = 0; i < 14; i++) { const y = h - 4 - (i * 7 + f * 3) % 30, x = (i * 13 + f * 5) % w; P.px(x, y, '#5a4a3a'); }
+}
+function paintStormCloud(P, w, h) {
+  for (const [bx, by, r] of [[12, 12, 10], [26, 9, 12], [42, 11, 11], [55, 13, 8], [33, 15, 10]])
+    P.ell(bx, by, r, r * 0.8, (x, y) => y > h - 3 ? '#2a2e38' : y > h - 7 ? '#3a3e4a' : (y < by - r * 0.4 ? '#5a5e6a' : '#464a56'));
+}
+
+function buildBiomeTextures(scene) {
+  SEASONS.forEach((_, s) => {
+    for (const b of ['steppe', 'north']) paintTex(scene, `ground_${b}@${s}`, 255, BANK - GROUND + 3, P => paintGround(P, GRASS_B[b][s], (b === 'steppe' ? 31 : 47) + s, s));
+    paintTex(scene, `cactus_0@${s}`, 22, 52, P => paintCactus(P, 22, 52, s, 0));
+    paintTex(scene, `cactus_1@${s}`, 18, 42, P => paintCactus(P, 18, 42, s, 1));
+    paintTex(scene, `cactus_2@${s}`, 14, 12, P => paintCactus(P, 14, 12, s, 2));
+    paintTex(scene, `cactus_far@${s}`, 12, 26, P => paintCactus(P, 12, 26, s, 1));
+    paintTex(scene, `crag@${s}`, 34, 46, P => paintCrag(P, 34, 46, s, 5));
+    paintTex(scene, `crag_far@${s}`, 26, 30, P => paintCrag(P, 26, 30, s, 9));
+    paintTex(scene, `drybush@${s}`, 17, 11, P => paintDryBush(P, s));
+    paintTex(scene, `skull@${s}`, 10, 7, P => paintSkull(P, s));
+    paintTex(scene, `spruce@${s}`, 26, 76, P => paintSpruce(P, 26, 76, SPRUCE[s], s));
+    paintTex(scene, `spruce_far@${s}`, 14, 44, P => paintSpruce(P, 14, 44, { ...SPRUCE_FAR[s], t: '#2f403c' }, s));
+    paintTex(scene, `boulder@${s}`, 28, 18, P => paintBoulder(P, 28, 18, s));
+    paintTex(scene, `runestone@${s}`, 12, 22, P => paintRuneStone(P, s));
+    paintTex(scene, `heather@${s}`, 12, 6, P => paintHeather(P, s));
+  });
+  for (let f = 0; f < 3; f++) paintTex(scene, 'tornado_' + f, 44, 96, P => paintTornado(P, f));
+  paintTex(scene, 'stormcloud', 64, 24, P => paintStormCloud(P, 64, 24));
+}
+
 // ================== МУЗЫКА И ЗВУКИ ==================
 // Всё играется синтезатором браузера. Тема одна и та же, но каждый круг
 // (32 шага) получает новую аранжировку: от народа, сезона и случая.
@@ -2211,6 +3403,9 @@ const RACE_SND = {
   human:  { tempo: 1.0,  tr: 0,  leads: ['flute', 'recorder', 'bell'], arps: ['lute', 'harp'], bass: ['soft', 'fifth'], drum: 'light' },
   orc:    { tempo: 1.12, tr: -2, leads: ['horn', 'reed', 'horn'], arps: ['lowlute', 'drone'], bass: ['heavy', 'fifth'], drum: 'war' },
   goblin: { tempo: 0.86, tr: 1,  leads: ['pluck', 'whistle', 'xylo'], arps: ['pizz', 'xylo'], bass: ['bouncy', 'walk'], drum: 'click' },
+  dwarf:  { tempo: 1.04, tr: -3, leads: ['horn', 'organ', 'reed'], arps: ['lowlute', 'lute'], bass: ['heavy', 'walk'], drum: 'anvil' },
+  elf:    { tempo: 0.92, tr: 2,  leads: ['flute', 'choir', 'whistle'], arps: ['harp', 'harp'], bass: ['soft', 'soft'], drum: 'shaker' },
+  undead: { tempo: 0.8,  tr: -5, leads: ['choir', 'organ', 'bell'], arps: ['drone', 'harp'], bass: ['soft', 'heavy'], drum: 'toll' },
 };
 // Настроение сезона: весна звонкая, лето полное, осень задумчивая, зима холодная
 const SEASON_SND = [
@@ -2321,6 +3516,8 @@ class Music {
       case 'harp': this.voice('triangle', f, t, 1.3, 0.07 * vel, { send: 0.4 }); break;
       case 'lowlute': this.voice('triangle', f / 2, t, 0.6, 0.1 * vel, { filter: 1200, send: 0.2 }); break;
       case 'pizz': this.voice('square', f, t, 0.12, 0.035 * vel, { filter: 1800, send: 0.1 }); break;
+      case 'organ': this.voice('square', f, t, dur * 1.5, 0.022 * vel, { attack: 0.05, filter: 1100, send: 0.5 }); this.voice('sine', f / 2, t, dur * 1.5, 0.05 * vel, { attack: 0.05, send: 0.4 }); break;
+      case 'choir': this.voice('sawtooth', f, t, dur * 1.9, 0.026 * vel, { attack: 0.22, filter: 850, vibrato: 4, send: 0.7 }); this.voice('triangle', f * 2, t, dur * 1.9, 0.02 * vel, { attack: 0.3, send: 0.7 }); break;
       case 'pad': this.voice('triangle', f, t, dur, 0.032 * vel, { attack: 0.5, filter: 900, send: 0.45 }); break;
     }
   }
@@ -2355,6 +3552,9 @@ class Music {
     if (dg > 0.2) {
       if (A.R.drum === 'light') { if (s8 === 0) this.kick(t, 0.18 * dg); if (s8 === 2 || s8 === 6) this.noise(t, 0.05, 0.05 * dg, 7000, this.musicBus, 'highpass'); }
       if (A.R.drum === 'war') { if (s8 === 0 || s8 === 3 || s8 === 4) this.kick(t, 0.32 * dg, 80, 40, 0.4); if (s8 === 4) this.noise(t, 0.15, 0.14 * dg, 1800, this.musicBus); if (s8 === 6) this.kick(t, 0.2 * dg, 140, 80, 0.25); }
+      if (A.R.drum === 'anvil') { if (s8 === 0 || s8 === 4) this.kick(t, 0.26 * dg, 100, 45, 0.35); if (s8 === 2 || s8 === 6) { this.voice('square', 1760, t, 0.08, 0.02 * dg, { filter: 5000, send: 0.3 }); this.voice('sine', 2637, t, 0.25, 0.025 * dg, { send: 0.3 }); } }
+      if (A.R.drum === 'shaker') { if (s8 % 2 === 1) this.noise(t, 0.04, 0.035 * dg, 8000, this.musicBus, 'highpass'); if (s8 === 0) this.kick(t, 0.1 * dg, 120, 60, 0.3); }
+      if (A.R.drum === 'toll') { if (s8 === 0 && step % 16 === 0) { this.voice('sine', 98, t, 2.4, 0.09 * dg, { send: 0.6 }); this.voice('sine', 98 * 2.76, t, 1.2, 0.02 * dg, { send: 0.6 }); } if (s8 === 4) this.kick(t, 0.16 * dg, 70, 35, 0.5); }
       if (A.R.drum === 'click') { if (s8 % 2 === 1) this.noise(t, 0.025, 0.08 * dg, 4000, this.musicBus, 'highpass'); if (s8 === 0 || s8 === 4) this.kick(t, 0.2 * dg, 110, 50, 0.3); }
     }
     // ночью — сердцебиение, в кровавую ночь ещё и гул
@@ -2417,8 +3617,9 @@ function buildAllTextures(scene) {
   buildBuildingTextures(scene);
   buildNatureTextures(scene);
   buildNewTextures(scene);
+  buildBiomeTextures(scene);
 }
-const GAME_VERSION = 'v0.12';
+const GAME_VERSION = 'v0.13.1';
 // Сложность: lazy — логова выпускают волны через ночь; dmg — урон чудовищ и вражеских воинов; raid — размер набегов
 const DIFFS = {
   easy:   { name: 'Лёгкая',  lazy: true,  dmg: 0.75, raid: 1,    desc: 'логова нападают через ночь, враги бьют на четверть слабее' },
@@ -2600,7 +3801,7 @@ class TitleScene extends Phaser.Scene {
     const fr = Math.floor(time / 200) % 2 ? 'B' : 'A';
     this.mon.setTexture(`mon_${fr}_${rk}`); this.escort[0].setTexture(`mel_${fr}_${rk}`); this.escort[1].setTexture(`rng_${fr === 'A' ? 'B' : 'A'}_${rk}`);
     if (this.escort[1].x > UW + 120) {
-      this.raceI = (this.raceI + 1) % 3; this.setRace(Object.keys(RACES)[this.raceI]);
+      this.raceI = (this.raceI + 1) % Object.keys(RACES).length; this.setRace(Object.keys(RACES)[this.raceI]);
       this.mon.x = -80; this.escort[0].x = -160; this.escort[1].x = -220;
     }
     this.fireT += dt; if (this.fireT > 0.14) { this.fireT = 0; this.fireF = (this.fireF + 1) % 3; this.fire.setTexture('fire_' + this.fireF); }
@@ -2621,23 +3822,23 @@ class SelectScene extends Phaser.Scene {
     this.add.text(UW / 2, 92, 'Правила у всех народов одни, отличаются облик, существа и музыка', { ...TXT, fontSize: '18px' }).setOrigin(0.5);
     this.race = SETTINGS.race && RACES[SETTINGS.race] ? SETTINGS.race : 'human';
     this.cards = {};
-    ['human', 'orc', 'goblin'].forEach((k, i) => {
-      const x = UW / 2 + (i - 1) * 330, y = 270, R = RACES[k];
-      const frame = this.add.rectangle(x, y, 290, 250, 0x000000, 0.3).setStrokeStyle(2, 0xefe3c2, 0.25).setInteractive({ useHandCursor: true });
-      this.add.image(x + 60, y + 40, 'hall1_' + k).setOrigin(0.5, 1).setScale(2.5).setAlpha(0.95);
-      const spr = this.add.image(x - 54, y + 40, 'mon_A_' + k).setOrigin(0.5, 1).setScale(4);
-      this.add.image(x + 118, y + 40, 'mel_A_' + k).setOrigin(0.5, 1).setScale(3);
-      this.add.text(x, y + 66, `${i + 1}. ${R.name}`, { ...TXT, fontSize: '28px' }).setOrigin(0.5);
-      this.add.text(x, y + 98, `${R.units.melee}, ${R.units.mage.toLowerCase()}, ${R.units.uniq.toLowerCase()}`, { ...TXT, fontSize: '16px', color: '#b9ad8f' }).setOrigin(0.5);
+    Object.keys(RACES).forEach((k, i) => {
+      const x = UW / 2 + (i % 3 - 1) * 360, y = 196 + Math.floor(i / 3) * 168, R = RACES[k];
+      const frame = this.add.rectangle(x, y, 340, 156, 0x000000, 0.3).setStrokeStyle(2, 0xefe3c2, 0.25).setInteractive({ useHandCursor: true });
+      this.add.image(x + 58, y + 20, 'hall1_' + k).setOrigin(0.5, 1).setScale(2).setAlpha(0.95);
+      const spr = this.add.image(x - 70, y + 20, 'mon_A_' + k).setOrigin(0.5, 1).setScale(3);
+      this.add.image(x + 136, y + 20, 'mel_A_' + k).setOrigin(0.5, 1).setScale(2.5);
+      this.add.text(x, y + 40, `${i + 1}. ${R.name}`, { ...TXT, fontSize: '24px' }).setOrigin(0.5);
+      this.add.text(x, y + 64, `${R.units.melee}, ${R.units.mage.toLowerCase()}, ${R.units.uniq.toLowerCase()}`, { ...TXT, fontSize: '14px', color: '#b9ad8f' }).setOrigin(0.5);
       frame.on('pointerover', () => spr.setTexture('mon_B_' + k));
       frame.on('pointerout', () => spr.setTexture('mon_A_' + k));
       frame.on('pointerdown', () => { music.start(); if (this.race === k) this.start(); else this.pickRace(k); });
       this.cards[k] = frame;
     });
-    this.add.text(UW / 2, 438, 'Сложность', { ...TXT, fontSize: '22px', color: '#d8ccaa' }).setOrigin(0.5);
+    this.add.text(UW / 2, 462, 'Сложность', { ...TXT, fontSize: '22px', color: '#d8ccaa' }).setOrigin(0.5);
     this.diff = DIFFS[SETTINGS.diff] ? SETTINGS.diff : 'normal';
-    this.dbtns = DIFF_KEYS.map((d, i) => menuButton(this, UW / 2 + (i - 1) * 250, 482, DIFFS[d].name, () => this.pickDiff(d), 220, 48, 24));
-    this.ddesc = this.add.text(UW / 2, 526, '', { ...TXT, fontSize: '18px', color: '#b9ad8f' }).setOrigin(0.5);
+    this.dbtns = DIFF_KEYS.map((d, i) => menuButton(this, UW / 2 + (i - 1) * 250, 500, DIFFS[d].name, () => this.pickDiff(d), 220, 48, 24));
+    this.ddesc = this.add.text(UW / 2, 540, '', { ...TXT, fontSize: '18px', color: '#b9ad8f' }).setOrigin(0.5);
     this.back = menuButton(this, 170, UH - 50, 'Назад (Esc)', () => this.leave('title'), 240, 50, 22);
     this.go = menuButton(this, UW - 190, UH - 50, 'В бой (Enter)', () => this.start(), 280, 50, 24);
     this.go.set(true);
@@ -2646,7 +3847,8 @@ class SelectScene extends Phaser.Scene {
     kb.on('keydown', ev => {
       music.start();
       const c = ev.code;
-      if (c === 'Digit1') this.pickRace('human'); else if (c === 'Digit2') this.pickRace('orc'); else if (c === 'Digit3') this.pickRace('goblin');
+      const dg = /^Digit([1-9])$/.exec(c), rks = Object.keys(RACES);
+      if (dg && rks[+dg[1] - 1]) this.pickRace(rks[+dg[1] - 1]);
       else if (c === 'ArrowLeft' || c === 'KeyA') this.pickDiff(DIFF_KEYS[Math.max(0, DIFF_KEYS.indexOf(this.diff) - 1)]);
       else if (c === 'ArrowRight' || c === 'KeyD') this.pickDiff(DIFF_KEYS[Math.min(2, DIFF_KEYS.indexOf(this.diff) + 1)]);
       else if (c === 'Enter' || c === 'Space') this.start();
@@ -2768,9 +3970,12 @@ const HILLS = [
 
 class GameScene extends Phaser.Scene {
   constructor() { super('game'); }
-  init(d) { this.diffKey = DIFFS[d.diff] ? d.diff : 'normal'; this.diff = DIFFS[this.diffKey]; this.rk = d.race || 'human'; this.R = RACES[this.rk]; this.LV = makeLevels(this.R); }
+  init(d) { this.diffKey = DIFFS[d.diff] ? d.diff : 'normal'; this.diff = DIFFS[this.diffKey]; this.rk = d.race || 'human'; this.R = RACES[this.rk]; this.LV = makeLevels(this.R); this.biomeOverride = BIOMES[d.biome] ? d.biome : null; }
 
   create() {
+    // зерно карты: лес, ягоды, темы логов, сундуки и домики каждый раз новые
+    this.seed = Math.floor(Math.random() * 1e9);
+    this.cityWall = null; this.cityRange = null; this.range0 = null; this.tornado = null; this.thunder = null; this.erupting = 0;
     const R = this.R, rk = this.rk, c = PLAYER_X;
     this.time.paused = false; this.tweens.resumeAll();
     this.center = c; this.coins = 0; this.banked = 0;
@@ -2788,6 +3993,7 @@ class GameScene extends Phaser.Scene {
 
     const cam = this.cameras.main;
     cam.setBounds(0, 0, WORLD, H).setRoundPixels(true).fadeIn(400);
+    this.biome = this.biomeOverride || pick(['forest', 'steppe', 'north']);
     this.drawBackdrop();
 
     this.fire = this.add.image(c, GROUND + 1, 'fire_0').setOrigin(0.5, 1).setScale(S).setDepth(6);
@@ -2800,8 +4006,8 @@ class GameScene extends Phaser.Scene {
     this.cityParts = { houses: [], towers: [], vills: [], carts: [] };
     this.deco(this.add.image(c + 140, GROUND + 2, 'sign').setOrigin(0.5, 1).setScale(S).setDepth(3));
 
-    { const th = ['imp', 'gob', 'gnome', 'imp', 'gob', 'gnome', ['imp', 'gob', 'gnome'][Math.floor(Math.random() * 3)]].sort(() => Math.random() - 0.5);
-      DENS.forEach(([x, tier], i) => this.addDen(x, tier, th[i % th.length])); }
+    // темы логов выбираются независимо для каждого логова
+    DENS.forEach(([x, tier]) => this.addDen(x, tier, pick(['imp', 'gob', 'gnome'])));
     for (const side of [-1, 1]) this.dens.filter(d => Math.sign(d.x - c) === side && (side < 0 || d.x < ENEMY_X)).sort((a, z) => Math.abs(a.x - c) - Math.abs(z.x - c)).forEach((d, i) => d.ring = i + 1);
     HUTS.forEach(x => this.addHut(x));
     this.foeInit();
@@ -2832,14 +4038,17 @@ class GameScene extends Phaser.Scene {
     this.hudText = hud(this.add.text(42, 26, '0', { ...TXT, fontSize: '29px', color: '#f2c14e' }).setOrigin(0, 0.5));
     this.bankText = hud(this.add.text(14, 54, '', { ...TXT, fontSize: '18px', color: '#e0c49a' }).setOrigin(0, 0.5));
     this.crewText = hud(this.add.text(14, 76, '', { ...TXT, fontSize: '18px', color: '#d8ccaa' }).setOrigin(0, 0.5));
-    hud(this.add.text(UW - 20, 26, R.name, { ...TXT, fontSize: '24px' }).setOrigin(1, 0.5));
+    // кнопка меню: пауза и настройки, в том числе на телефоне
+    this.menuBtn = hud(this.add.text(UW - 16, 24, '☰ Меню', { ...TXT, fontSize: '22px', color: '#f2c14e', backgroundColor: '#141d21cc', padding: { x: 10, y: 4 } }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
+    this.menuBtn.on('pointerdown', () => { if (!this.panelOpen) this.togglePause(); });
+    hud(this.add.text(UW - 20, 56, R.name, { ...TXT, fontSize: '22px' }).setOrigin(1, 0.5));
     this.foeText = hud(this.add.text(14, 76, '', { ...TXT, fontSize: '18px', color: '#e07a7a' }).setOrigin(0, 0.5));
     this.dayText = hud(this.add.text(UW / 2, 20, '', { ...TXT, fontSize: '20px', color: '#d8ccaa' }).setOrigin(0.5));
-    this.musicBtn = hud(this.add.text(UW - 20, 54, music.muted ? 'Музыка: выкл' : 'Музыка: вкл', { ...TXT, fontSize: '18px', color: '#d8ccaa' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
+    this.musicBtn = hud(this.add.text(UW - 20, 80, music.muted ? 'Музыка: выкл' : 'Музыка: вкл', { ...TXT, fontSize: '18px', color: '#d8ccaa' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
     this.musicBtn.on('pointerdown', () => this.toggleMusic());
-    this.boltText = hud(this.add.text(UW - 20, 78, '', { ...TXT, fontSize: '18px', color: '#9fc3ff' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
+    this.boltText = hud(this.add.text(UW - 20, 102, '', { ...TXT, fontSize: '18px', color: '#9fc3ff' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
     this.boltText.on('pointerdown', () => { if (this.guild.level >= 2 && this.lightningReady) { this.aimBolt = true; this.toast('Щёлкни туда, куда ударить молнией'); } else this.castLightning(); });
-    this.hornBtn = hud(this.add.text(UW - 20, 102, 'Рог: E', { ...TXT, fontSize: '18px', color: '#e0c49a' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
+    this.hornBtn = hud(this.add.text(UW - 20, 124, 'Рог: E', { ...TXT, fontSize: '18px', color: '#e0c49a' }).setOrigin(1, 0.5).setInteractive({ useHandCursor: true }));
     this.hornBtn.on('pointerdown', () => this.blowHorn());
     this.marker = this.add.image(0, GROUND + 1, 'stake_' + rk).setOrigin(0.5, 1).setScale(2).setDepth(9).setAlpha(0.7).setVisible(false);
     this.mini = hud(this.add.graphics());
@@ -2855,11 +4064,19 @@ class GameScene extends Phaser.Scene {
     this.applySeason(0, true);
     this.buildWeather();
     this.checkEvents();
-    this.toast(`Собери монеты и построй: ${R.hall}\nНа востоке враг: ${this.foeName()}. Снеси их замок!\nEsc — пауза и настройки`);
+    this.toast(`${BIOMES[this.biome].name}: здесь бывают ${BIOMES[this.biome].hazard}\nСобери монеты и построй: ${R.hall}\nНа востоке враг: ${this.foeName()}. Снеси их замок!\nEsc — пауза и настройки`);
   }
 
+  // солнце и луна идут по дуге: восходят слева, заходят справа за горы
+  placeSky() {
+    const a = this.dayT * Math.PI * 2, R = W * 0.47, top = 170, hor = GROUND - 40;
+    const put = (o, ang) => { const x = W / 2 + Math.sin(ang) * R, y = hor - (hor - top) * Math.cos(ang); o.setPosition(x, y); return y < hor + 30; };
+    const sv = put(this.sun, a); this.sunGlow.setPosition(this.sun.x, this.sun.y).setVisible(sv); this.sun.setVisible(sv);
+    { const dim = this.storm || this.thunder || this.tornado; this.sun.setAlpha(dim ? 0.35 : 1); this.sunGlow.setAlpha(dim ? 0.1 : 0.8); }
+    put(this.moon, a + Math.PI);
+  }
   toggleMusic() { music.start(); const on = music.toggle(); this.musicBtn.setText(on ? 'Музыка: вкл' : 'Музыка: выкл'); }
-  maxBuilders() { return 2 + this.hall.level * 2 + 2 * this.huts.filter(h => h.bonus).length; }
+  maxBuilders() { return 2 + this.hall.level * 2 + 2 * this.huts.filter(h => h.bonus).length + 2 * this.huts.filter(h => h.up).length; }
   maxUnits() { return 4 + this.hall.level * 2 + 2 * this.spots.filter(s => s.type === 'outpost' && s.level > 0).length; }
   unitName(k) { return this.R.units[k] || TAMED[k]; }
   lv(s) { return s.levels || this.LV[s.type]; }
@@ -2870,12 +4087,14 @@ class GameScene extends Phaser.Scene {
 
   // ---------- фон ----------
   drawBackdrop() {
-    const R0 = rng(7), c = PLAYER_X;
+    const R0 = rng(this.seed + 7), c = PLAYER_X;
     const stars = this.add.graphics().setScrollFactor(0).setDepth(55);
     stars.fillStyle(0xfff4d6, 1);
     for (let i = 0; i < 90; i++) { const s = R0() < 0.2 ? 3 : 2; stars.fillRect(Math.floor(R0() * W), 10 + Math.floor(R0() * 200), s, s); }
     this.stars = stars.setAlpha(0);
     this.moon = this.add.image(W - 170, 140, 'moon').setScale(3).setScrollFactor(0).setDepth(-30).setAlpha(0);
+    this.sunGlow = this.add.image(0, 0, 'glow_sun').setScale(3).setScrollFactor(0).setDepth(-31).setBlendMode(Phaser.BlendModes.ADD);
+    this.sun = this.add.image(0, 0, 'sun').setScale(3).setScrollFactor(0).setDepth(-30);
     this.clouds = [];
     for (let i = 0; i < 9; i++) this.clouds.push(this.add.image(i * 190 + R0() * 120, 60 + R0() * 170, 'cloud').setScale(3).setScrollFactor(0).setDepth(-28).setAlpha(0.85));
     this.birds = [];
@@ -2887,39 +4106,39 @@ class GameScene extends Phaser.Scene {
     this.haze2 = this.add.rectangle(0, 180, W, GROUND - 180, 0x7fa2a6, 0.14).setOrigin(0).setScrollFactor(0).setDepth(-11);
 
     const farLen = 0.55 * (WORLD - W) + W;
-    for (let x = 0; x < farLen; x += 18 + Math.floor(R0() * 34)) {
-      const key = R0() < 0.35 ? 'pine_far' : 'tree_far_' + Math.floor(R0() * 3);
+    for (let x = 0; x < farLen; x += (this.biome === 'steppe' ? 40 : 18) + Math.floor(R0() * (this.biome === 'steppe' ? 70 : 34))) {
+      const key = this.bk('far', R0(), R0());
       this.seas(this.add.image(x, GROUND + 3, key + '@0').setOrigin(0.5, 1).setScale(3).setScrollFactor(0.55).setDepth(-15), key, 0.55);
     }
     // средний ярус леса: деревья поменьше и в дымке, между дальним лесом и ближним
     const midLen = 0.8 * (WORLD - W) + W;
-    for (let x = 0; x < midLen; x += 40 + Math.floor(R0() * 70)) {
-      const key = R0() < 0.4 ? 'pine_near' : 'tree_near_' + Math.floor(R0() * 3);
+    for (let x = 0; x < midLen; x += (this.biome === 'steppe' ? 90 : 40) + Math.floor(R0() * (this.biome === 'steppe' ? 140 : 70))) {
+      const key = this.bk('mid', R0(), R0());
       this.seas(this.add.image(x, GROUND + 3, key + '@0').setOrigin(0.5, 1).setScale(2).setScrollFactor(0.8).setDepth(-13).setAlpha(0.55).setFlipX(R0() < 0.5), key, 0.8);
     }
-    this.ground = this.add.tileSprite(0, GROUND - 3, WORLD, BANK - GROUND + 3, 'ground@0').setOrigin(0).setDepth(-5);
+    this.ground = this.add.tileSprite(0, GROUND - 3, WORLD, BANK - GROUND + 3, this.groundKey(0)).setOrigin(0).setDepth(-5);
     this.add.tileSprite(c - 880, GROUND + 3, 1760, 12, 'path').setOrigin(0).setDepth(-4);
     this.add.rectangle(0, BANK, WORLD, H - BANK, 0x1b3040).setOrigin(0).setDepth(-5);
 
     const nearDen = x => DENS.some(([o]) => Math.abs(x - o) < 200) || Math.abs(x - ENEMY_X) < 1080;
     const nearHut = x => HUTS.some(o => Math.abs(x - o) < 140);
     const denZone = x => DENS.some(([o]) => Math.abs(x - o) < 700);
-    for (let x = 0; x < WORLD; x += 26 + Math.floor(R0() * 48)) {
+    for (let x = 0; x < WORLD; x += (this.biome === 'steppe' ? 70 : 26) + Math.floor(R0() * (this.biome === 'steppe' ? 120 : 48))) {
       if (Math.abs(x - c) < 1000 || nearDen(x) || nearHut(x)) continue;
       const r = R0();
-      const key = denZone(x) ? (r < 0.5 ? 'deadtree' : 'pine_near') : (r < 0.3 ? 'pine_near' : r < 0.45 ? 'birch' : 'tree_near_' + Math.floor(R0() * 3));
+      const key = denZone(x) ? this.bk('den', r, 0) : this.bk('near', r, R0());
       this.seas(this.add.image(x, GROUND + 3, key + '@0').setOrigin(0.5, 1).setScale(S + (R0() < 0.4 ? 1 : 0)).setDepth(-8).setFlipX(R0() < 0.5), key).tree = true;
     }
     for (let x = 0; x < WORLD; x += 40 + Math.floor(R0() * 110)) {
       const r = R0();
-      const key = r < 0.25 ? 'bush' : r < 0.42 ? 'rock' : r < 0.78 ? 'tuft' : 'flower';
-      if (key === 'bush' && Math.abs(x - c) < 950) continue;
-      const o = this.seas(this.add.image(x, GROUND + 2, key + '@0').setOrigin(0.5, 1).setScale(S).setDepth(key === 'bush' ? -6 : 3).setFlipX(R0() < 0.5), key); if (key === 'bush') o.tree = true;
+      const key = this.bk('small', r, 0);
+      if ((key === 'bush' || key === 'drybush') && Math.abs(x - c) < 950) continue;
+      const o = this.seas(this.add.image(x, GROUND + 2, key + '@0').setOrigin(0.5, 1).setScale(S).setDepth(key === 'bush' ? -6 : 3).setFlipX(R0() < 0.5), key); if (key === 'bush' || key === 'drybush') o.tree = true;
     }
     // пни, брёвна, папоротники и грибы
     for (let x = 0; x < WORLD; x += 90 + Math.floor(R0() * 220)) {
       if (Math.abs(x - c) < 700 || nearHut(x)) continue;
-      const r = R0(), key = r < 0.22 ? 'stump' : r < 0.36 ? 'log' : r < 0.75 ? 'fern' : 'shrooms';
+      const r = R0(), key = this.bk('extra', r, 0);
       this.seas(this.add.image(x, GROUND + 3, key + '@0').setOrigin(0.5, 1).setScale(S).setDepth(key === 'fern' ? 8 : 2).setFlipX(R0() < 0.5), key);
     }
     for (let i = 0; i < 11; i++) {
@@ -2982,7 +4201,7 @@ class GameScene extends Phaser.Scene {
   applySeason(s, first) {
     this.season = s;
     for (const it of this.seasonal) it.o.setTexture(`${it.base}@${s}`);
-    this.ground.setTexture(`ground@${s}`);
+    this.ground.setTexture(this.groundKey(s));
     this.drawHills(s);
     for (const f of this.forage) this.setForageLook(f);
     for (const fm of this.spots) if (fm.type === 'farm' && fm.level && fm.building) fm.building.setTexture(this.texFor(fm, fm.level));
@@ -3085,7 +4304,7 @@ class GameScene extends Phaser.Scene {
       if (this.pendingAct === o) this.pendingAct = null;
       this.time.delayedCall(300, () => {
         o.locked = false; o.paid = 0; o.slotsCost = -1;
-        if (o.isTaxDesk) this.completeTax(); else if (o.isFoeGate) this.completeFoeAssault(); else if (o.isDen) this.completeDen(o); else if (o.isHut) this.completeHut(o); else this.completeSpot(o, info);
+        if (o.isTaxDesk) this.completeTax(); else if (o.isFoeGate) this.completeFoeAssault(); else if (o.isDen) this.completeDen(o); else if (o.isHut) this.completeHut(o, info); else this.completeSpot(o, info);
       });
     }
   }
@@ -3145,7 +4364,7 @@ class GameScene extends Phaser.Scene {
     if (n >= max) return { mode: 'info', label: `Воины: ${n}/${max}` + (hl < 3 ? `\nБольше мест даст: ${this.LV.hall[hl].name}` : '') + sw };
     return { mode: 'pay', label: `Нанять: ${this.unitName(o.unit)}  ${n}/${max}${sw}`, cost: U.cost, act: 'hire', unit: o.unit };
   }
-  cyclePick(s) { if (s.isDen || s.isHut || s.isFoeGate || s.isTaxDesk || s.paid || s.type === 'bank') return; const n = this.spotOptions(s).length; if (n > 1) { s.pick = (s.pick + 1) % n; s.slotsCost = -1; } }
+  cyclePick(s) { if (s.isHut) { const [pl, pr] = this.perimeter(); if (!s.up && s.x > pl && s.x < pr) { s.pick = s.pick ? 0 : 1; s.slotsCost = -1; } return; } if (s.isDen || s.isFoeGate || s.isTaxDesk || s.paid || s.type === 'bank') return; const n = this.spotOptions(s).length; if (n > 1) { s.pick = (s.pick + 1) % n; s.slotsCost = -1; } }
   completeSpot(s, info) {
     this.puff(s.x, 0xcbb894); music.sfx('build');
     if (info.act === 'hire') { this.spawnUnit(s.x, info.unit); return; }
@@ -3207,6 +4426,7 @@ class GameScene extends Phaser.Scene {
     else if (s.type === 'wall') {
       this.toast(s.level === 3 ? `Готово: ${name}\nНа стену поднялся стрелок` : `Готово: ${name}. Город расширяется`);
       if (s.level === 1 && s.ring >= 1) this.addPlots(s);
+      if (s.level === 1) this.refreshWallLines();
       this.updateCity();
     }
     this.updateHud(true);
@@ -3274,11 +4494,18 @@ class GameScene extends Phaser.Scene {
   hutInfo(h) {
     if (this.hall.level < 1) return { mode: 'info', label: `Хижина бродяг\nСначала нужна постройка: ${this.R.hall}` };
     const n = this.builders.length, max = this.maxBuilders();
-    if (n >= max) return { mode: 'info', label: `Рабочие: ${n}/${max}` + (this.hall.level < 3 ? `\nБольше мест даст: ${this.LV.hall[this.hall.level].name}` : '') };
-    if (!h.stock) return { mode: 'info', label: 'Хижина пуста\nНовые бродяги придут на рассвете' };
-    return { mode: 'pay', label: `Нанять: ${this.R.builder}  ${n}/${max}\nздесь ждут: ${h.stock}`, cost: 2 };
+    const [pl0, pr0] = this.perimeter();
+    if (n >= max && !(h.pick === 1 && !h.up && h.x > pl0 && h.x < pr0)) return { mode: 'info', label: `Рабочие: ${n}/${max}` + (this.hall.level < 3 ? `\nБольше мест даст: ${this.LV.hall[this.hall.level].name}` : '') + (!h.up && h.x > pl0 && h.x < pr0 ? '\nW или колесо: улучшить хижину' : '') };
+    const [pl, pr] = this.perimeter(), canUp = !h.up && h.x > pl && h.x < pr, sw = canUp ? '\nW или колесо: переключить' : '';
+    if (canUp && h.pick === 1) return { mode: 'pay', label: `Улучшить хижину: ещё 2 места для рабочих${sw}`, cost: 6, act: 'hutup' };
+    if (!h.stock) return canUp ? { mode: 'info', label: `Хижина пуста${sw}` } : { mode: 'info', label: 'Хижина пуста\nНовые бродяги придут на рассвете' };
+    return { mode: 'pay', label: `Нанять: ${this.R.builder}  ${n}/${max}\nздесь ждут: ${h.stock}${sw}`, cost: 2 };
   }
-  completeHut(h) {
+  completeHut(h, info) {
+    if (info && info.act === 'hutup') {
+      h.up = true; h.pick = 0; h.img.setTexture('hut2'); this.puff(h.x, 0xcbb894, 14, 50); music.sfx('build');
+      this.updateHud(true); this.toast(`Хижина улучшена. Мест для рабочих: ${this.maxBuilders()}`); return;
+    }
     h.stock--;
     const v = h.vag.pop(), x = v ? v.spr.x : h.x;
     if (v) v.spr.destroy();
@@ -3288,7 +4515,7 @@ class GameScene extends Phaser.Scene {
 
   // ---------- ягоды и грибы ----------
   placeForage() {
-    const R0 = rng(17), c = this.center;
+    const R0 = rng(this.seed + 17), c = this.center;
     for (let i = 0; i < 56; i++) {
       const side = i % 2 ? 1 : -1, dist = 1050 + Math.pow(R0(), 1.4) * 7000, x = c + side * dist;
       if (x < 300 || x > ENEMY_X - 1600 || DENS.some(([o]) => Math.abs(x - o) < 280) || HUTS.some(o => Math.abs(x - o) < 160)) continue;
@@ -3537,7 +4764,7 @@ class GameScene extends Phaser.Scene {
   shoot(u, tx, foe, den) {
     const dmg = u.U.dmg * this.dmgMul(), flip = tx < u.spr.x;
     if (u.kind === 'ranged') {
-      const key = this.rk === 'goblin' ? 'pebble' : this.rk === 'orc' ? 'javelin' : 'arrow';
+      const key = this.R.style === 'mound' ? 'pebble' : this.R.style === 'tent' ? 'javelin' : 'arrow';
       const a = this.add.image(u.spr.x, GROUND - 42, key).setScale(S).setDepth(9).setFlipX(flip);
       music.sfx('shoot');
       this.tweens.add({ targets: a, x: tx, y: GROUND - 30, duration: Math.abs(tx - u.spr.x) * 1.6 + 80, ease: 'Sine.in',
@@ -3573,6 +4800,9 @@ class GameScene extends Phaser.Scene {
   // ночью воины делятся между стенами поровну: каждый род войск отдельно, ближние к стене — к ней
   balanceSides() {
     const c = this.center, list = this.units.filter(u => u.mode !== 'follow');
+    // слева угроза — только живые логова; справа — логова и вражеское королевство
+    const leftThreat = this.dens.some(d => d.alive && d.x < c), rightThreat = this.dens.some(d => d.alive && d.x > c) || (this.foe && this.foe.alive);
+    if (leftThreat !== rightThreat) { const sd = leftThreat ? -1 : 1; list.forEach(u => { u.side = sd; }); return; }
     const kinds = [...new Set(list.map(u => u.kind))];
     let tilt = 0;
     for (const k of kinds) {
@@ -3588,7 +4818,11 @@ class GameScene extends Phaser.Scene {
     if (u.kind !== 'siege' && L && R && Math.random() < 0.5) return Math.random() < 0.5 ? L.x - Phaser.Math.Between(60, 320) : R.x + Phaser.Math.Between(60, 320);
     return Phaser.Math.Between(L ? L.x + 40 : a, R ? R.x - 40 : b);
   }
-  freeSide() { let l = 0, r = 0; for (const u of this.units) { if (u.side < 0) l++; else r++; } return l <= r ? -1 : 1; }
+  freeSide() {
+    const c = this.center, leftThreat = this.dens.some(d => d.alive && d.x < c), rightThreat = this.dens.some(d => d.alive && d.x > c) || (this.foe && this.foe.alive);
+    if (leftThreat !== rightThreat) return leftThreat ? -1 : 1;
+    let l = 0, r = 0; for (const u of this.units) { if (u.side < 0) l++; else r++; } return l <= r ? -1 : 1;
+  }
   patrolBounds(u) {
     const c = this.center;
     if (u && u.kind === 'siege') return [c - 260, c + 260];
@@ -3631,7 +4865,7 @@ class GameScene extends Phaser.Scene {
         if (Math.abs(dx) < 3) { u.wait = Phaser.Math.FloatBetween(0.8, 3); u.target = this.patrolTarget(u, a, b); }
         else { moveDir = Math.sign(dx); if (Math.abs(u.spr.x - c) > 1000) speed = u.kind === 'siege' ? 80 : 120; else if (u.kind === 'siege') speed = U.speed; }
       }
-      if (moveDir) { u.spr.x += moveDir * speed * dt; u.spr.setFlipX(moveDir < 0); u.ft += dt; if (u.ft > 0.18) { u.ft = 0; u.f ^= 1; } }
+      if (moveDir) { u.spr.x = this.unitStep(u, u.spr.x + moveDir * speed * dt); u.spr.setFlipX(moveDir < 0); u.ft += dt; if (u.ft > 0.18) { u.ft = 0; u.f ^= 1; } }
       else u.f = 0;
       let fr = u.f ? 'B' : 'A';
       if (u.kind === 'mage' && u.cast > 0) fr = 'C';
@@ -3694,7 +4928,7 @@ class GameScene extends Phaser.Scene {
     this.endFoeRaid(); this.foeDawn();
     this.dayNum = this.nightCount + 1;
     this.doom = false;
-    for (const h of this.huts) if (h.stock < 3) { h.stock++; this.addVagrant(h); }
+    for (const h of this.huts) if (h.stock < (h.up ? 4 : 3)) { h.stock++; this.addVagrant(h); }
     const s = Math.floor((this.dayNum - 1) / SEASON_LEN) % 4;
     if (s !== this.season) {
       if (s === 0) for (const f of this.forage) f.charges = 2;
@@ -3964,14 +5198,17 @@ class GameScene extends Phaser.Scene {
     this.invuln -= dt;
 
     // день, ночь, сезон
-    this.dayT = (this.dayT + dt / CYCLE) % 1;
+    // светлая часть суток идёт медленнее или быстрее в зависимости от сезона
+    const lightPart = !this.isNight;
+    this.dayT = (this.dayT + dt / CYCLE / (lightPart ? DAY_K[this.season] : NIGHT_K[this.season])) % 1;
+    this.placeSky();
     const n = Math.pow((1 - Math.cos(this.dayT * Math.PI * 2)) / 2, 1.4);
     this.nightN = n;
     this.night.setFillStyle(this.bloodNight ? 0x2a0a14 : 0x0c1428).setAlpha(n * 0.58);
-    this.stars.setAlpha(n); this.moon.setAlpha(n);
+    this.stars.setAlpha(n); this.moon.setAlpha(Math.min(1, n * 1.6));
     const dawn = this.dayT > 0.72 && this.dayT < 0.95 ? Math.sin((this.dayT - 0.72) / 0.23 * Math.PI) : 0;
     this.mist.setAlpha(dawn * 0.28 + (this.season === 2 ? 0.06 : 0));
-    const dc = SKY[this.season], DAY = new Phaser.Display.Color(dc[0], dc[1], dc[2]);
+    const dc = this.skyCol(this.season), DAY = new Phaser.Display.Color(dc[0], dc[1], dc[2]);
     const sky = Phaser.Display.Color.Interpolate.ColorWithColor(DAY, this.NIGHT, 100, Math.round(n * 100));
     const skyCol = Phaser.Display.Color.GetColor(sky.r, sky.g, sky.b);
     this.cameras.main.setBackgroundColor(skyCol);
@@ -3995,7 +5232,7 @@ class GameScene extends Phaser.Scene {
     if (!this.waveSent && !this.isNight && this.dayT < 0.5 && n > 0.3) this.sendWaves();
     if (!this.isNight && n > 0.5) this.startNight();
     else if (this.isNight && n < 0.25) this.startDay();
-    const label = `${this.isNight ? `Ночь ${this.nightCount}` : `День ${this.dayNum}`}, ${SEASONS[this.season].name}` + (this.doom ? ', конец света' : this.storm === 'rain' ? ', гроза' : this.storm === 'snow' ? ', метель' : '');
+    const label = `${this.isNight ? `Ночь ${this.nightCount}` : `День ${this.dayNum}`}, ${SEASONS[this.season].name}` + (this.doom ? ', конец света' : this.storm === 'rain' ? ', гроза' : this.storm === 'dust' ? ', пыльная буря' : this.storm === 'snow' ? ', метель' : '');
     if (this.dayText.text !== label) this.dayText.setText(label);
 
     // огонь, дым, мельница, бродяги
@@ -4031,7 +5268,7 @@ class GameScene extends Phaser.Scene {
       else { gallop = Math.abs(dxw) > 420; v = Math.sign(dxw) * Math.min(gallop ? 300 : 150, Math.abs(dxw) / dt); }
     }
     this.marker.setVisible(this.walkTo != null);
-    this.player.x = Phaser.Math.Clamp(this.player.x + v * dt, 20, WORLD - 20);
+    this.player.x = this.foeWallClamp(this.player.x, Phaser.Math.Clamp(this.player.x + v * dt, 20, WORLD - 20));
     if (v) { this.player.setFlipX(v < 0); this.pt += dt; if (this.pt > (gallop ? 0.09 : 0.16)) { this.pt = 0; this.pf ^= 1; } }
     else this.pf = 0;
     this.player.setTexture((this.pf ? 'mon_B_' : 'mon_A_') + rk);
@@ -4112,11 +5349,48 @@ class GameScene extends Phaser.Scene {
     this.drawMinimap(time);
   }
 
+  // шаг нашего воина: вражескую стену не пройти, её надо разбить (дракон перелетает)
+  unitStep(u, nx) {
+    if (u.kind === 'dragon') return nx;
+    const cx = this.foeWallClamp(u.spr.x, nx);
+    if (cx !== nx && u.atk <= 0) {
+      const f = this.foe, w = [f.wallL, f.wallR].find(o => o && o.level && Math.abs(o.x - cx) < o.half + 10);
+      if (w) { u.atk = u.U.cd; if (u.U.shot) this.shoot(u, w.x, null, w); else { this.meleeFx(u.spr, w.x); this.damageFoeBuilding(w, u.U.dmg * this.dmgMul()); } }
+    }
+    return cx;
+  }
+  // стены вражеского замка — препятствие для монарха и наших воинов, пока стоят
+  foeWallClamp(x0, x1) {
+    const f = this.foe; if (!f || !f.alive || x0 === x1) return x1;
+    for (const w of [f.wallL, f.wallR]) {
+      if (!w || !w.level) continue;
+      const a = w.x - w.half - 4, b = w.x + w.half + 4;
+      if (x0 <= a && x1 > a) return a;
+      if (x0 >= b && x1 < b) return b;
+    }
+    return x1;
+  }
   // ================== СТЕНЫ, ГРАНИЦЫ ГОРОДА, ЗАХВАТ ЗЕМЛИ ==================
   addWallSpot(side, ring) {
     const s = this.addSpot('wall', this.center + side * WALL_LINES[String(side)][ring]);
     s.side = side; s.ring = ring; this.walls[String(side)][ring] = s;
     return s;
+  }
+  // следующая линия стен появляется, когда построена предыдущая и до неё нет живых логов
+  refreshWallLines() {
+    const c = this.center;
+    for (const side of [-1, 1]) {
+      const lines = WALL_LINES[String(side)], ws = this.walls[String(side)];
+      for (let i = 1; i < lines.length; i++) {
+        if (ws[i]) continue;
+        if (!ws[i - 1] || ws[i - 1].level < 1) break;
+        const x = c + side * lines[i];
+        if (this.dens.some(d => d.alive && Math.sign(d.x - c) === side && Math.abs(d.x - c) < lines[i] + 250)) break;
+        if (this.foe && side > 0 && x > ENEMY_X - 1400) break;
+        this.addWallSpot(side, i); this.refreshStakes();
+        break;
+      }
+    }
   }
   edge(side) {
     const ws = this.walls[String(side)].filter(w => w && w.level > 0);
@@ -4137,7 +5411,7 @@ class GameScene extends Phaser.Scene {
     const op = this.addSpot('outpost', d.x, false, lv);
     op.tier = d.tier; this.measure(op, this.texFor(op, 1)); this.placeUI(op, op.h);
     this.addSpot('tower', d.x - side * 320);
-    if (d.ring && WALL_LINES[String(side)][d.ring] != null && !this.walls[String(side)][d.ring]) this.addWallSpot(side, d.ring);
+    this.refreshWallLines();
     this.refreshStakes();
     this.time.delayedCall(4200, () => { if (!this.over) this.toast(`Земля у логова свободна. Здесь можно построить:\n${(mid ? R.outpost : R.uniqhome).toLowerCase()}, дозорную башню и новую стену`); });
   }
@@ -4157,7 +5431,7 @@ class GameScene extends Phaser.Scene {
     this.cityWall.setTexture(key).setPosition(x0, GROUND + 3).setSize(x1 - x0, th).setVisible(true);
     kill(P.towers); kill(P.houses); kill(P.vills); kill(P.carts);
     for (let x = x0 + 160; x < x1 - 80; x += 420) P.towers.push(this.add.image(x, GROUND + 3, `ctower${lvl}_${rk}`).setOrigin(0.5, 1).setScale(S).setDepth(-9));
-    const R0 = rng(777), free = x => [...this.spots, ...this.huts, ...this.specials].every(s => Math.abs(x - s.x) > (s.half || 60) + 34) && Math.abs(x - this.center) > 60;
+    const R0 = rng(this.seed + 777), free = x => [...this.spots, ...this.huts, ...this.specials].every(s => Math.abs(x - s.x) > (s.half || 60) + 34) && Math.abs(x - this.center) > 60;
     for (let x = x0 + 60; x < x1 - 60; x += 70 + Math.floor(R0() * 90)) {
       if (!free(x)) continue;
       const h = this.add.image(x, GROUND + 3, `townhouse_${Math.floor(R0() * 4)}_${rk}`).setOrigin(0.5, 1).setScale(S).setDepth(-7).setFlipX(R0() < 0.5);
@@ -4229,7 +5503,7 @@ class GameScene extends Phaser.Scene {
   }
   animUnit(u, move) {
     const rk = this.rk, U = u.U;
-    if (move) { u.spr.x += move; u.spr.setFlipX(move < 0); u.ft += Math.abs(move) / 40; if (u.ft > 0.5) { u.ft = 0; u.f ^= 1; } } else u.f = 0;
+    if (move) { u.spr.x = this.unitStep(u, u.spr.x + move); u.spr.setFlipX(move < 0); u.ft += Math.abs(move) / 40; if (u.ft > 0.5) { u.ft = 0; u.f ^= 1; } } else u.f = 0;
     let fr = u.f ? 'B' : 'A';
     if (u.kind === 'mage' && u.cast > 0) fr = 'C';
     if (u.kind === 'siege') fr = u.cast > 0 ? 'B' : 'A';
@@ -4296,7 +5570,7 @@ class GameScene extends Phaser.Scene {
   // ================== ПОГОДА И СЛУЧАЙНЫЕ СОБЫТИЯ ==================
   buildWeather() {
     this.rain = [];
-    const R0 = rng(91);
+    const R0 = rng(this.seed + 91);
     for (let i = 0; i < 160; i++) this.rain.push(this.add.rectangle(R0() * W, R0() * H, 2, 12, 0xa8c0d0, 0.5).setScrollFactor(0).setDepth(57).setAngle(12).setVisible(false));
     this.stormShade = this.add.rectangle(0, 0, W, H, 0x22303c, 0).setOrigin(0).setScrollFactor(0).setDepth(49);
     const vx = 0.05 * (this.center - W / 2) + W * 0.3;
@@ -4304,6 +5578,7 @@ class GameScene extends Phaser.Scene {
     this.volcanoGlow = this.add.image(vx, GROUND - 96 - 46 * 3, 'glow_red').setScale(2).setScrollFactor(0.05).setBlendMode(Phaser.BlendModes.ADD).setDepth(-24.5).setAlpha(0);
     this.lava = [];
     this.thunderT = 6;
+    this.volcano.setVisible(this.biome === 'forest'); this.volcanoGlow.setVisible(this.biome === 'forest');
   }
   planYear(y) {
     const start = y * 20 + 1, minDay = y === 0 ? 4 : start + 1;
@@ -4311,21 +5586,22 @@ class GameScene extends Phaser.Scene {
     const storms = new Set(), n = Math.random() < 0.5 ? 1 : 2;
     while (storms.size < n) storms.add(day());
     const cat = Math.max(y === 0 ? 6 : minDay, day());
-    this.year = { y, storms, cat, kind: Math.random() < 0.5 ? 'meteor' : 'volcano', santa: start + 15 + Math.floor(Math.random() * 5) };
+    this.year = { y, storms, cat, kind: this.biome === 'steppe' ? 'tornado' : this.biome === 'north' ? 'thunder' : Math.random() < 0.5 ? 'meteor' : 'volcano', santa: start + 15 + Math.floor(Math.random() * 5) };
   }
   checkEvents() {
     if (this.over) return;
     const d = this.dayNum, y = Math.floor((d - 1) / 20);
     if (!this.year || this.year.y !== y) this.planYear(y);
     const wasStorm = this.storm;
-    this.storm = this.year.storms.has(d) ? (this.season === 3 ? 'snow' : 'rain') : null;
+    this.storm = this.year.storms.has(d) ? (this.season === 3 ? 'snow' : this.biome === 'steppe' ? 'dust' : 'rain') : null;
     const cat = this.year.cat === d ? this.year.kind : null;
     this.doom = !!(this.storm && cat);
     this.catKind = cat; this.catTimer = cat ? 18 + Math.random() * 40 : null;
-    music.setRain(this.storm);
-    this.rain.forEach(r => r.setVisible(this.storm === 'rain'));
+    music.setRain(this.storm === 'dust' ? 'snow' : this.storm);
+    this.rain.forEach((r, i) => { const du = this.storm === 'dust'; r.setVisible(this.storm === 'rain' || du); if (du) r.setFillStyle(i % 3 ? 0xb8946a : 0x8a6c4c, 0.55).setSize(14, 3).setAngle(0); else r.setFillStyle(0xa8c0d0, 0.5).setSize(2, 12).setAngle(12); });
+    this.stormShade.setFillStyle(this.storm === 'dust' ? 0x6a5030 : 0x22303c);
     if (this.doom) { music.sfx('doom'); this.cameras.main.shake(600, 0.01); this.toast('Сегодня конец света!\nБуря, катастрофа, а ночью все чудовища разом пойдут на вас'); }
-    else if (this.storm) this.toast(this.storm === 'rain' ? 'Надвигается гроза. Рабочие не выходят за стены,\nа ночью чудовища будут злее' : 'Метель. Рабочие не выходят за стены,\nа ночью чудовища будут злее');
+    else if (this.storm) this.toast(this.storm === 'dust' ? 'Пыльная буря. Рабочие не выходят за стены,\nа ночью чудовища будут злее' : this.storm === 'rain' ? 'Надвигается гроза. Рабочие не выходят за стены,\nа ночью чудовища будут злее' : 'Метель. Рабочие не выходят за стены,\nа ночью чудовища будут злее');
     else if (wasStorm) this.toast('Буря утихла');
     if (this.year.santa === d) this.time.delayedCall(9000 + Math.random() * 25000, () => { if (!this.isNight && !this.waveSent) this.santaFlight(); });
   }
@@ -4337,11 +5613,13 @@ class GameScene extends Phaser.Scene {
       this.thunderT -= dt;
       if (this.thunderT <= 0) { this.thunderT = 7 + Math.random() * 9; this.flash.setAlpha(0.3); this.tweens.add({ targets: this.flash, alpha: 0, duration: 300 }); music.sfx('thunder'); }
     }
+    if (st === 'dust') for (const r of this.rain) { r.x += 900 * dt * (r.width > 0 ? 1 : 1); r.y += Math.sin(r.x / 60) * 40 * dt; if (r.x > W + 20) { r.x = -20; r.y = 100 + Math.random() * (H - 100); } }
+    this.updateTornado(dt, time); this.updateThunder(dt);
     if (st === 'snow') for (const p of this.parts) { p.o.setVisible(true); p.o.y += p.vy * dt * 1.6; p.o.x -= 70 * dt; if (p.o.x < -4) p.o.x = W + 4; }
     // вулкан дымит, при извержении — лава
     this.volcanoSmokeT = (this.volcanoSmokeT || 0) - dt;
     const vsx = this.volcano.x - this.cameras.main.scrollX * 0.05, vsy = this.volcano.y - this.volcano.displayHeight;
-    if (this.volcanoSmokeT <= 0) { this.volcanoSmokeT = this.erupting ? 0.12 : 1.6;
+    if (this.volcanoSmokeT <= 0 && this.biome === 'forest') { this.volcanoSmokeT = this.erupting ? 0.12 : 1.6;
       const sm = this.add.circle(vsx + Phaser.Math.Between(-6, 6), vsy, this.erupting ? 12 : 7, this.erupting ? 0x3a3030 : 0x8a8a8a, 0.5).setScrollFactor(0).setDepth(-24.8);
       this.tweens.add({ targets: sm, y: vsy - (this.erupting ? 140 : 70), x: sm.x + 30, scale: 3, alpha: 0, duration: this.erupting ? 2500 : 4000, onComplete: () => sm.destroy() }); }
     if (this.erupting) {
@@ -4359,6 +5637,8 @@ class GameScene extends Phaser.Scene {
   }
   // Катастрофа: случайное здание теряет уровень, здание первого уровня рушится
   catastrophe(kind) {
+    if (kind === 'tornado') return this.tornadoStart();
+    if (kind === 'thunder') return this.thunderStart();
     const targets = this.spots.filter(s => s.level > 0);
     const t = targets.length ? pick(targets) : null;
     const tx = t ? t.x : this.center + Phaser.Math.Between(-600, 600);
@@ -4451,7 +5731,7 @@ Object.assign(GameScene.prototype, {
     const X = ENEMY_X;
     const bg = `cwall1_${race}_x`, th = this.textures.get(bg).getSourceImage().height;
     f.cityWall = this.add.tileSprite(X - 916, GROUND + 3, 1832, th, bg).setOrigin(0, 1).setDepth(-9);
-    const R0 = rng(4242);
+    const R0 = rng(this.seed + 4242);
     f.houses = [];
     for (let x = X - 860; x < X + 860; x += 90 + Math.floor(R0() * 80)) {
       if ([0, -940, 940, 420, -700, 700, -440].some(o => Math.abs(x - (X + o)) < 90)) continue;
@@ -4562,7 +5842,7 @@ Object.assign(GameScene.prototype, {
     const dmg = e.U.dmg * this.foe.dmgMul * (opp.fac ? 1 : this.diff.dmg), f = this.foe;
     if (!e.U.shot) { this.meleeFx(e.spr, opp.spr.x, e.kind === 'beast' ? 'heavy' : 'slash'); if (opp.isPlayer) this.hitPlayer(e); else this.hurt(opp, dmg); return; }
     if (e.kind === 'mage') e.cast = 0.35;
-    const key = e.kind === 'mage' ? `orb_${f.race}_foe` : f.race === 'goblin' ? 'pebble' : f.race === 'orc' ? 'javelin' : 'arrow';
+    const key = e.kind === 'mage' ? `orb_${f.race}_foe` : f.R.style === 'mound' ? 'pebble' : f.R.style === 'tent' ? 'javelin' : 'arrow';
     const a = this.add.image(e.spr.x, GROUND - 46, key).setScale(S).setDepth(9).setFlipX(opp.spr.x < e.spr.x), tx = opp.spr.x;
     music.sfx(e.kind === 'mage' ? 'magic' : 'shoot');
     this.tweens.add({ targets: a, x: tx, y: GROUND - 30, duration: Math.abs(tx - e.spr.x) * 1.5 + 100, ease: 'Sine.in', onComplete: () => {
@@ -4907,6 +6187,194 @@ Object.assign(GameScene.prototype, {
       } });
     }
     if (spr.x > hx + 1600) { spr.destroy(); this.santa = null; }
+  },
+});
+
+// ================== БИОМЫ: ФОН, РАСТИТЕЛЬНОСТЬ, БЕДСТВИЯ ==================
+const hexS = n => '#' + (n >>> 0).toString(16).padStart(6, '0');
+const mixI = (a, b, t) => parseInt(mix(hexS(a), hexS(b), t).slice(1), 16);
+// цвета гор и холмов по биомам и сезонам
+const BIOME_HILLS = {
+  forest: HILLS,
+  steppe: [
+    { m: 0xb08060, mt: 0xc89a74, snow: -9999, h1: 0x8a7a4e, h1t: 0x9e8e5a, h2: 0x6e623e, h2t: 0x84764a },
+    { m: 0xb88460, mt: 0xcc9c72, snow: -9999, h1: 0x9a8650, h1t: 0xae9a5e, h2: 0x7a6a40, h2t: 0x8e7c4c },
+    { m: 0xa87458, mt: 0xbc8a68, snow: -9999, h1: 0x8a6a44, h1t: 0x9c7c50, h2: 0x6e5236, h2t: 0x846442 },
+    { m: 0xa89a90, mt: 0xc8beb6, snow: GROUND - 230, h1: 0x9a9088, h1t: 0xd8d4cc, h2: 0x7e746c, h2t: 0xc8c0b6 },
+  ],
+  north: [
+    { m: 0x5e7484, mt: 0x748a98, snow: GROUND - 190, h1: 0x34504a, h1t: 0x44624e, h2: 0x263e3a, h2t: 0x324c44 },
+    { m: 0x5e7484, mt: 0x748a98, snow: GROUND - 205, h1: 0x324e48, h1t: 0x405e4c, h2: 0x243c38, h2t: 0x304a42 },
+    { m: 0x6a727a, mt: 0x80888e, snow: GROUND - 180, h1: 0x4e5240, h1t: 0x60624a, h2: 0x3c4034, h2t: 0x4c503e },
+    { m: 0x8496a4, mt: 0xb0c0cc, snow: GROUND - 120, h1: 0x7a8c96, h1t: 0xdfe8ea, h2: 0x62788a, h2t: 0xc9d8de },
+  ],
+};
+const BIOME_SKY = { forest: null, steppe: [214, 190, 150], north: [150, 176, 200] };
+
+Object.assign(GameScene.prototype, {
+  // какой предмет поставить в данном ярусе для текущего биома
+  bk(layer, r, r2) {
+    const b = this.biome, i3 = Math.floor(r2 * 3);
+    if (b === 'steppe') {
+      if (layer === 'far') return r < 0.6 ? 'crag_far' : 'cactus_far';
+      if (layer === 'mid') return r < 0.45 ? 'crag' : 'cactus_' + (i3 % 2);
+      if (layer === 'near') return r < 0.35 ? 'cactus_0' : r < 0.6 ? 'cactus_1' : r < 0.82 ? 'crag' : 'cactus_2';
+      if (layer === 'den') return r < 0.5 ? 'deadtree' : 'crag';
+      if (layer === 'small') return r < 0.25 ? 'drybush' : r < 0.42 ? 'rock' : r < 0.85 ? 'tuft' : 'skull';
+      if (layer === 'extra') return r < 0.3 ? 'cactus_2' : r < 0.5 ? 'skull' : r < 0.8 ? 'drybush' : 'rock';
+    }
+    if (b === 'north') {
+      if (layer === 'far') return r < 0.6 ? 'spruce_far' : 'pine_far';
+      if (layer === 'mid') return r < 0.6 ? 'spruce' : 'pine_near';
+      if (layer === 'near') return r < 0.55 ? 'spruce' : r < 0.7 ? 'birch' : r < 0.84 ? 'pine_near' : 'boulder';
+      if (layer === 'den') return r < 0.5 ? 'deadtree' : 'spruce';
+      if (layer === 'small') return r < 0.22 ? 'bush' : r < 0.42 ? 'rock' : r < 0.78 ? 'tuft' : 'heather';
+      if (layer === 'extra') return r < 0.25 ? 'stump' : r < 0.42 ? 'log' : r < 0.78 ? 'fern' : 'runestone';
+    }
+    if (layer === 'far') return r < 0.35 ? 'pine_far' : 'tree_far_' + i3;
+    if (layer === 'mid') return r < 0.4 ? 'pine_near' : 'tree_near_' + i3;
+    if (layer === 'near') return r < 0.3 ? 'pine_near' : r < 0.45 ? 'birch' : 'tree_near_' + i3;
+    if (layer === 'den') return r < 0.5 ? 'deadtree' : 'pine_near';
+    if (layer === 'small') return r < 0.25 ? 'bush' : r < 0.42 ? 'rock' : r < 0.78 ? 'tuft' : 'flower';
+    return r < 0.22 ? 'stump' : r < 0.36 ? 'log' : r < 0.75 ? 'fern' : 'shrooms';
+  },
+  groundKey(s) { return (this.biome === 'forest' ? 'ground' : 'ground_' + this.biome) + '@' + s; },
+  skyCol(s) { const c = SKY[s], t = BIOME_SKY[this.biome]; return t ? c.map((v, i) => Math.round(v * 0.7 + t[i] * 0.3)) : c; },
+
+  // ---------- горы и холмы: несколько планов, свет и тень по склонам, снег, деревья на гребнях ----------
+  drawHills(s) {
+    const B = this.biome, HS = BIOME_HILLS[B][s], MK = H / UH, HK = 1 + (MK - 1) * 0.6;
+    const sky = this.skyCol(s), skyI = (sky[0] << 16) | (sky[1] << 8) | sky[2];
+    const snow = HS.snow < -1000 ? -9999 : GROUND - MK * (GROUND - HS.snow);
+    const hash = (x, y) => { let h = (x * 374761393 + y * 668265263) ^ (this.seed || 0); h = (h ^ (h >>> 13)) * 1274126177; return ((h ^ (h >>> 16)) >>> 0) / 4294967296; };
+    // профиль гор по биому (плавные формы, без мелкой «гребёнки»)
+    const tri = v => 1 - Math.abs((v % 2 + 2) % 2 - 1);
+    const prof = (x, far) => {
+      const k = far ? 1.08 : 1, o = far ? 900 : 0; x += o;
+      if (B === 'steppe') {
+        const step = (v, t) => Math.max(0, Math.min(1, (v - t) * 6));
+        const mesa = 70 * step(Math.sin(x / 310), 0.2) + 30 * step(Math.sin(x / 130 + 1.7), 0.5);
+        return MK * k * (55 + mesa + 3 * Math.sin(x / 23));
+      }
+      if (B === 'north') return MK * k * (105 + 80 * Math.pow(Math.abs(Math.sin(x / 230)), 1.2) + 55 * tri(x / 61) * (0.6 + 0.4 * Math.sin(x / 170)) + 6 * Math.sin(x / 19));
+      return MK * k * (150 + 70 * Math.abs(Math.sin(x / 260)) + 30 * Math.sin(x / 97 + 2) + 12 * Math.sin(x / 31));
+    };
+    const snowAt = x => snow + 9 * Math.sin(x / 23) + 6 * Math.sin(x / 9 + 1);
+    // дальний хребет в дымке
+    if (!this.range0) this.range0 = this.add.graphics().setScrollFactor(0.03).setDepth(-27);
+    const r0 = this.range0.clear(), farC = mixI(HS.m, skyI, 0.6), farT = mixI(HS.mt, skyI, 0.5), farS = mixI(0xdfe8ea, skyI, 0.4), len0 = 0.03 * (WORLD - W) + W + 16;
+    for (let x = 0; x < len0; x += 3) {
+      const y = Math.round((GROUND - 30 - prof(x * 1.6, true)) / 3) * 3, sn = snowAt(x * 1.6) - 30;
+      r0.fillStyle(farC, 1).fillRect(x, y, 3, GROUND - y);
+      if (y < sn) r0.fillStyle(farS, 1).fillRect(x, y, 3, Math.round(Math.min(36, sn - y) / 3) * 3);
+      else r0.fillStyle(farT, 1).fillRect(x, y, 3, 3);
+    }
+    // основной хребет: освещённые и теневые склоны, слои породы, рваная снеговая линия
+    const mg = this.mountains.clear(), mlen = 0.05 * (WORLD - W) + W + 16;
+    const lit = mixI(HS.m, 0xffffff, 0.1), dark = mixI(HS.m, 0x000000, 0.16), deep = mixI(HS.m, 0x000000, 0.28);
+    for (let x = 0; x < mlen; x += 3) {
+      const y = Math.round((GROUND - prof(x)) / 3) * 3, slope = prof(x + 15) - prof(x - 15);
+      const face = slope > 5 ? lit : slope < -5 ? dark : HS.m;
+      mg.fillStyle(face, 1).fillRect(x, y, 3, GROUND - y);
+      if (B === 'steppe') {
+        for (let yy = y + 9; yy < GROUND - 30; yy += 12) mg.fillStyle(((yy / 12) | 0) % 2 ? deep : lit, 0.45).fillRect(x, yy, 3, 3);
+      } else {
+        // прожилки и уступы скал, тянутся вдоль склона
+        for (let yy = y + 15; yy < GROUND - 60; yy += 21) if (hash((x / 12) | 0, (yy / 21) | 0) < 0.22) mg.fillStyle(slope < -5 ? deep : dark, 0.8).fillRect(x, yy + (((x / 12) | 0) % 2) * 3, 3, 3);
+      }
+      const sn = snowAt(x);
+      if (y < sn) {
+        const depth = Math.round(Math.min(72, sn - y) / 3) * 3;
+        mg.fillStyle(slope < -5 ? 0xbccad2 : 0xe8f0f2, 1).fillRect(x, y, 3, depth);
+        mg.fillStyle(0xffffff, 1).fillRect(x, y, 3, 3);
+      } else mg.fillStyle(HS.mt, 1).fillRect(x, y, 3, 3);
+    }
+    // холмы с силуэтами деревьев (кактусов, елей) по гребню
+    const hills = (g, sf, color, top, base, a1, a2, treeC) => {
+      g.clear(); const len = sf * (WORLD - W) + W + 16, ys = [];
+      for (let x = 0; x < len; x += 6) {
+        const y = Math.round((base - a1 * Math.sin(x / 190) - a2 * Math.sin(x / 61 + 1.3)) / 3) * 3; ys.push(y);
+        g.fillStyle(color, 1).fillRect(x, y, 6, GROUND + 40 - y); g.fillStyle(top, 1).fillRect(x, y, 6, 3);
+        if (hash(x, 7) < 0.25) g.fillStyle(mixI(color, 0x000000, 0.12), 1).fillRect(x, y + 9 + ((hash(x, 9) * 4) | 0) * 6, 6, 3);
+      }
+      for (let i = 0; i < ys.length; i++) {
+        const x = i * 6, y = ys[i], r = hash(x, 3);
+        if (B === 'steppe') {
+          if (r < 0.06) { g.fillStyle(treeC, 1).fillRect(x, y - 15, 3, 15); g.fillRect(x - 3, y - 9, 3, 3); g.fillRect(x + 3, y - 12, 3, 3); }
+          else if (r < 0.12) g.fillStyle(treeC, 1).fillRect(x, y - 3, 9, 3);
+        } else if (r < (B === 'north' ? 0.7 : 0.55)) {
+          const hgt = 9 + ((hash(x, 5) * 4) | 0) * 3;
+          if (B === 'north' || r < 0.25) for (let k = 0; k < hgt; k += 3) { const wd = Math.max(1, Math.round((k / hgt) * 3)) * 3; g.fillStyle(treeC, 1).fillRect(x + 3 - wd / 2, y - hgt + k, wd, 3); }
+          else { g.fillStyle(treeC, 1).fillRect(x - 3, y - hgt + 3, 9, hgt - 3); g.fillRect(x, y - hgt, 3, 3); }
+          if (s === 3) g.fillStyle(0xe6eef0, 1).fillRect(x + 1, y - hgt, 3, 3);
+        }
+      }
+    };
+    hills(this.hill1, 0.15, HS.h1, HS.h1t, GROUND - 110 * HK, 45 * HK, 18 * HK, mixI(HS.h1, 0x000000, 0.22));
+    hills(this.hill2, 0.3, HS.h2, HS.h2t, GROUND - 64 * HK, 30 * HK, 14 * HK, mixI(HS.h2, 0x000000, 0.25));
+    if (this.volcano) { this.volcano.setVisible(B === 'forest'); this.volcanoGlow.setVisible(B === 'forest'); }
+  },
+
+  // ---------- смерч в степи: идёт через город и бьёт по всем зданиям на пути ----------
+  tornadoStart() {
+    const dir = Math.random() < 0.5 ? 1 : -1, x0 = this.center - dir * 1700;
+    const spr = this.add.sprite(x0, GROUND + 6, 'tornado_0').setOrigin(0.5, 1).setScale(S).setDepth(30).setAlpha(0);
+    this.tweens.add({ targets: spr, alpha: 0.9, duration: 1200 });
+    this.tornado = { spr, dir, left: 3400, hit: new Set(), t: 0 };
+    music.sfx('quake'); this.stormShade.setFillStyle(0x6a5030);
+    this.toast(`Пыльная буря! Смерч идёт ${dir > 0 ? 'с запада' : 'с востока'}\nОн разрушит здания на своём пути`);
+  },
+  updateTornado(dt, time) {
+    const T = this.tornado; if (!T) return;
+    const step = 110 * dt; T.spr.x += T.dir * step; T.left -= step; T.t += dt;
+    T.spr.setTexture('tornado_' + (Math.floor(time / 90) % 3)).setFlipX(Math.floor(time / 300) % 2 === 0);
+    this.stormShade.setAlpha(Math.max(this.stormShade.alpha, 0.22));
+    if (T.t > 0.25) { T.t = 0; this.puff(T.spr.x + Phaser.Math.Between(-30, 30), 0x8a7a64, 3, 40, GROUND - 6); if (Math.abs(T.spr.x - this.player.x) < W) this.cameras.main.shake(120, 0.003); }
+    for (const s of this.spots) if (s.level > 0 && !T.hit.has(s) && Math.abs(s.x - T.spr.x) < 40) { T.hit.add(s); this.damageBuilding(s, Math.ceil(s.maxHp * 0.6)); }
+    for (const u of [...this.units]) if (u.kind !== 'dragon' && Math.abs(u.spr.x - T.spr.x) < 30 && !T.hit.has(u)) { T.hit.add(u); this.damageUnit(u, 4); u.spr.x += T.dir * 60; }
+    for (const b of [...this.builders]) if (Math.abs(b.spr.x - T.spr.x) < 25) this.scareBuilder(b, T.spr.x - T.dir * 10);
+    for (const e of this.enemies) if (!e.dead && Math.abs(e.spr.x - T.spr.x) < 30 && !T.hit.has(e)) { T.hit.add(e); this.damageEnemy(e, 6); }
+    if (Math.abs(this.player.x - T.spr.x) < 26 && !T.hit.has('p')) { T.hit.add('p'); this.playerHitBy(T.spr.x - T.dir * 10, 2); }
+    if (T.left <= 0) { this.tweens.add({ targets: T.spr, alpha: 0, duration: 1500, onComplete: () => T.spr.destroy() }); this.tornado = null; this.stormShade.setFillStyle(0x22303c); this.toast('Смерч стих'); }
+  },
+
+  // ---------- гроза на севере: тучи собираются, молнии бьют в здания и воинов ----------
+  thunderStart() {
+    this.thunder = { strikes: 5 + Math.floor(Math.random() * 3), t: 6, clouds: [] };
+    for (let i = 0; i < 6; i++) {
+      const c = this.add.image(Phaser.Math.Between(0, W), 80 + Math.random() * 90, 'stormcloud').setScale(4).setScrollFactor(0).setDepth(-20).setAlpha(0);
+      this.tweens.add({ targets: c, alpha: 0.95, duration: 3000 }); this.thunder.clouds.push(c);
+    }
+    music.sfx('thunder');
+    this.toast('Собираются грозовые тучи!\nМолнии могут ударить в здания и воинов');
+  },
+  updateThunder(dt) {
+    const T = this.thunder; if (!T) return;
+    this.stormShade.setAlpha(Math.max(this.stormShade.alpha, 0.3));
+    T.clouds.forEach((c, i) => { c.x += (i % 2 ? 8 : -6) * dt; });
+    T.t -= dt; if (T.t > 0) return;
+    if (T.strikes <= 0) { T.clouds.forEach(c => this.tweens.add({ targets: c, alpha: 0, duration: 2500, onComplete: () => c.destroy() })); this.thunder = null; this.toast('Гроза прошла'); return; }
+    T.strikes--; T.t = 2 + Math.random() * 2.5;
+    const [pl, pr] = this.perimeter(), r = Math.random();
+    const blds = this.spots.filter(s => s.level > 0 && s.x > pl - 300 && s.x < pr + 300);
+    let x = Phaser.Math.Between(Math.round(pl - 300), Math.round(pr + 300));
+    if (r < 0.5 && blds.length) x = pick(blds).x + Phaser.Math.Between(-10, 10);
+    else if (r < 0.85 && this.units.length) x = pick(this.units).spr.x;
+    this.skyBolt(x);
+  },
+  skyBolt(x) {
+    const g = this.add.graphics().setDepth(56), pts = [[x + Phaser.Math.Between(-60, 60), 0]];
+    while (pts[pts.length - 1][1] < GROUND - 4) { const [px, py] = pts[pts.length - 1], ny = Math.min(GROUND - 4, py + Phaser.Math.Between(18, 34)), k = (ny - py) / Math.max(1, GROUND - 4 - py); pts.push([px + (x - px) * k + (ny < GROUND - 4 ? Phaser.Math.Between(-16, 16) : 0), ny]); }
+    const stroke = (w, col, a) => { g.lineStyle(w, col, a); g.beginPath(); g.moveTo(pts[0][0], pts[0][1]); pts.forEach(p => g.lineTo(p[0], p[1])); g.strokePath(); };
+    stroke(12, 0xb0a0ff, 0.3); stroke(6, 0xd8d0ff, 0.7); stroke(3, 0xffffff, 1);
+    this.flash.setAlpha(0.55); this.tweens.add({ targets: this.flash, alpha: 0, duration: 380 });
+    this.tweens.add({ targets: g, alpha: 0, duration: 450, delay: 100, onComplete: () => g.destroy() });
+    music.sfx('thunder'); if (Math.abs(x - this.player.x) < W) this.cameras.main.shake(260, 0.01);
+    this.puff(x, 0xfff1b0, 10, 30, GROUND - 10);
+    for (const s of this.spots) if (s.level > 0 && Math.abs(s.x - x) < (s.half || 40)) { this.damageBuilding(s, Math.ceil(s.maxHp * 0.4)); const fire = this.add.image(x, GROUND + 1, 'fire_0').setOrigin(0.5, 1).setScale(S).setDepth(6); this.tweens.add({ targets: fire, alpha: 0, delay: 5000, duration: 1500, onComplete: () => fire.destroy() }); break; }
+    for (const u of [...this.units]) if (Math.abs(u.spr.x - x) < 34) this.damageUnit(u, 6);
+    for (const e of this.enemies) if (!e.dead && Math.abs(e.spr.x - x) < 60) this.damageEnemy(e, 10);
+    if (Math.abs(this.player.x - x) < 30) this.playerHitBy(x - 10, 2);
   },
 });
 
