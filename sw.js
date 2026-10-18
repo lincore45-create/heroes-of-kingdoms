@@ -1,4 +1,4 @@
-const C = 'hok-v0.13.3', FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon192.png', 'icon512.png', 'icon512m.png'];
+const C = 'hok-v0.13.4', FILES = ['./', 'index.html', 'manifest.webmanifest', 'icon192.png', 'icon512.png', 'icon512m.png'];
 self.addEventListener('install', e => { self.skipWaiting(); e.waitUntil(caches.open(C).then(c => c.addAll(FILES))); });
 self.addEventListener('activate', e => e.waitUntil(caches.keys().then(ks => Promise.all(ks.filter(k => k !== C).map(k => caches.delete(k)))).then(() => self.clients.claim())));
 self.addEventListener('fetch', e => { if (e.request.method !== 'GET') return;
